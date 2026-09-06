@@ -1,0 +1,195 @@
+{
+    "geode": "5.8.2",
+    "gd": {
+        "win": "2.2081",
+        "android": "2.2081",
+        "mac": "2.2081",
+        "ios": "2.2081"
+    },
+    "id": "andre.macro-maker",
+    "name": "Macro Maker",
+    "version": "v1.0.0",
+    "developer": "andre",
+    "description": "Works out a way through the level with measured 2.2 physics, checks it by playing it, and writes the result out as a macro.",
+    "tags": ["utility", "offline", "gameplay", "developer"],
+    "settings": {
+        "search-title": {
+            "type": "title",
+            "name": "How Hard It Thinks"
+        },
+        "effort": {
+            "type": "string",
+            "default": "Balanced",
+            "one-of": ["Quick", "Balanced", "Thorough", "Custom"],
+            "name": "Effort",
+            "description": "How much searching each attempt is allowed. Quick is a first look, Thorough keeps a wide beam alive and takes minutes on a long level. Custom uses the three numbers below."
+        },
+        "beam-width": {
+            "type": "int",
+            "default": 192,
+            "min": 8,
+            "max": 3072,
+            "name": "Beam Width",
+            "description": "How many part-routes stay alive at each physics step. Wider finds tighter routes and costs proportionally more. Only used on Custom effort.",
+            "control": {
+                "slider": false
+            }
+        },
+        "flight-interval": {
+            "type": "int",
+            "default": 3,
+            "min": 1,
+            "max": 12,
+            "name": "Flying Decision Spacing",
+            "description": "In ship, wave, UFO and swing the search only considers changing the button every this many physics steps. One is frame perfect and slow. Only used on Custom effort.",
+            "control": {
+                "slider": true
+            }
+        },
+        "search-seconds": {
+            "type": "float",
+            "default": 60.0,
+            "min": 5.0,
+            "max": 900.0,
+            "name": "Seconds Per Attempt",
+            "description": "Wall clock ceiling on one search. The search runs on its own thread, so the game keeps drawing while it thinks. Only used on Custom effort.",
+            "control": {
+                "slider": false
+            }
+        },
+        "verify-title": {
+            "type": "title",
+            "name": "Checking The Route"
+        },
+        "verify": {
+            "type": "string",
+            "default": "Fast",
+            "one-of": ["Fast", "Watch", "Off"],
+            "name": "Play It Back To Check",
+            "description": "A route is found in the simulator, which is measured but is not the game. Fast replays it through the real game as quickly as the machine allows; Watch replays it at normal speed so you can see it; Off writes the macro without checking it."
+        },
+        "verify-rounds": {
+            "type": "int",
+            "default": 4,
+            "min": 0,
+            "max": 20,
+            "name": "Retries After A Death",
+            "description": "When the real game kills a route the simulator was happy with, that spot is marked as expensive and the level is searched again. This is how many times that is allowed to happen before it keeps the best route it has.",
+            "control": {
+                "slider": true
+            }
+        },
+        "verify-ms": {
+            "type": "float",
+            "default": 10.0,
+            "min": 2.0,
+            "max": 60.0,
+            "name": "Checking Time Per Frame",
+            "description": "How many milliseconds of fast replay to run each drawn frame. Higher checks the route sooner and makes the window feel frozen while it does.",
+            "control": {
+                "slider-step": 1.0
+            }
+        },
+        "output-title": {
+            "type": "title",
+            "name": "What Gets Written"
+        },
+        "write-gdr": {
+            "type": "bool",
+            "default": true,
+            "name": "GDReplayFormat (.gdr.json)",
+            "description": "The format most Geode bots read, xdBot among them."
+        },
+        "write-mhr": {
+            "type": "bool",
+            "default": true,
+            "name": "Mega Hack Replay (.mhr.json)"
+        },
+        "write-plain": {
+            "type": "bool",
+            "default": false,
+            "name": "Plain JSON",
+            "description": "Our own shape: every button change with the clock spelled out. Handy for reading, and for converting to a format nothing else here writes."
+        },
+        "extra-folder": {
+            "type": "string",
+            "default": "",
+            "name": "Also Copy Macros To",
+            "description": "A folder to drop a second copy of every macro in, so it lands where your bot already looks. Leave empty to write only to this mod's own folder."
+        },
+        "save-partial": {
+            "type": "bool",
+            "default": true,
+            "name": "Write Unfinished Routes Too",
+            "description": "Keep the macro even when the route only gets part way. It still plays up to where it got, which is usually the point of looking."
+        },
+        "behaviour-title": {
+            "type": "title",
+            "name": "Behaviour"
+        },
+        "auto-play": {
+            "type": "bool",
+            "default": false,
+            "name": "Play The Macro When It Is Done",
+            "description": "Replay the finished route at normal speed once everything is written."
+        },
+        "hud-title": {
+            "type": "title",
+            "name": "Display"
+        },
+        "show-hud": {
+            "type": "bool",
+            "default": true,
+            "name": "Show The Panel",
+            "description": "The readout with what it is doing and how far the best route gets."
+        },
+        "hud-y": {
+            "type": "float",
+            "default": 0.82,
+            "min": 0.1,
+            "max": 0.98,
+            "name": "Panel Height",
+            "control": {
+                "slider-step": 0.02
+            }
+        },
+        "hud-scale": {
+            "type": "float",
+            "default": 1.0,
+            "min": 0.5,
+            "max": 2.0,
+            "name": "Panel Size",
+            "control": {
+                "slider-step": 0.05
+            }
+        },
+        "hotkeys-title": {
+            "type": "title",
+            "name": "Hotkeys"
+        },
+        "key-make": {
+            "type": "keybind",
+            "default": ["G"],
+            "name": "Make A Macro For This Level",
+            "category": "gameplay"
+        },
+        "key-play": {
+            "type": "keybind",
+            "default": ["H"],
+            "name": "Play The Macro",
+            "category": "gameplay"
+        },
+        "key-stop": {
+            "type": "keybind",
+            "default": ["J"],
+            "name": "Stop",
+            "category": "gameplay"
+        },
+        "debug-log": {
+            "type": "bool",
+            "default": false,
+            "name": "Extra Logging",
+            "description": "Write what the level looked like to the simulator, and what each search round did, to the Geode log."
+        }
+    }
+}
