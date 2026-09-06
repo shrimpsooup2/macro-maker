@@ -154,7 +154,13 @@ std::unique_ptr<Level> captureLevel(PlayLayer* layer, CaptureReport& report) {
         entry.x = rect.origin.x + rect.size.width * 0.5f;
         entry.y = rect.origin.y + rect.size.height * 0.5f;
         entry.rot = object->getRotation();
-        entry.multi = object->m_isMultiActivate;
+
+        // Key 99, the editor's multi-activate box, is on EnhancedGameObject rather than
+        // on GameObject: only the things that can be set off more than once carry it,
+        // which is every orb and pad and nothing else we care about.
+        if (auto* enhanced = typeinfo_cast<EnhancedGameObject*>(object)) {
+            entry.multi = enhanced->m_isMultiActivate;
+        }
 
         if (kind == KSlope) {
             slopeCorner(entry.rot, object->m_isFlipX, object->m_isFlipY, entry.cornerX,
