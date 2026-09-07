@@ -170,6 +170,12 @@ private:
     bool m_runOver = false;
     bool m_runDied = false;
 
+    // A run that wedges against a wall neither dies nor finishes: it simply stops, and
+    // waiting for it is waiting forever. So is a reset that never arrives. Both are
+    // watched.
+    int m_stallSteps = 0;
+    int m_stallFrames = 0;
+
     bool m_selfReset = false;
     Phase m_afterReset = Phase::Idle;
     bool m_finishedInGame = false;

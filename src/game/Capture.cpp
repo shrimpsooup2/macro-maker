@@ -60,22 +60,48 @@ void slopeCorner(float rotation, bool flipX, bool flipY, int& cornerX, int& corn
     cornerY = sy;
 }
 
-// Saw blades are round and the game reports them as the square their picture fits in.
-// The object's own radius says so outright where it is set; where it is not, the shape
-// does: the game reports saws as large and square, spikes as small and taller than wide.
-bool looksRound(GameObject* object, float w, float h) {
-    if (object->m_objectRadius > 0.f) return true;
-    return w >= 30.f && std::abs(w - h) <= 0.15f * w;
+// What the game collides with for a round object. It keeps the radius on the object, so
+// there is nothing to work out from the shape: if it is set, this thing is a circle of
+// that size, and if it is not, it is a box like everything else. Scale is applied the
+// same way it is to the box.
+float roundRadius(GameObject* object) {
+    if (object->m_objectRadius <= 0.f) return 0.f;
+    float scale = std::max(0.01f, std::abs(object->getScale()));
+    return object->m_objectRadius * scale;
 }
 
 } // namespace
 
+namespace {
+std::unordered_set<int>& killers() {
+    static std::unordered_set<int> known;
+    return known;
+}
+} // namespace
+
+void rememberKiller(int objectId) {
+    if (objectId <= 0) return;
+    if (killers().insert(objectId).second) {
+        log::info("[macro-maker] id {} kills: remembering that, since the simulator has to be "
+                  "told what the game already knows",
+                  objectId);
+    }
+}
+
+bool isKnownKiller(int objectId) {
+    return killers().count(objectId) != 0;
+}
+
+std::size_t knownKillerCount() {
+    return killers().size();
+}
+
 std::string CaptureReport::summary() const {
     return fmt::format("{} objects: {} solid, {} deadly, {} orbs and pads, {} portals; "
                        "dropped {} scenery, {} triggers, {} moved by triggers, {} riding "
-                       "along with the player",
+                       "along with the player; {} known to kill despite their type",
                        objectsSeen, solids, hazards, orbs, portals, droppedScenery,
-                       droppedTriggers, droppedMoving, droppedRiding);
+                       droppedTriggers, droppedMoving, droppedRiding, learnedHazards);
 }
 
 std::unique_ptr<Level> captureLevel(PlayLayer* layer, CaptureReport& report) {
@@ -134,6 +160,13 @@ std::unique_ptr<Level> captureLevel(PlayLayer* layer, CaptureReport& report) {
         }
 
         int kind = static_cast<int>(object->m_objectType);
+
+        // Whatever the game says its type is, if it has killed somebody it is a hazard.
+        if (!isDeadly(kind) && isKnownKiller(id)) {
+            kind = KHazard;
+            ++report.learnedHazards;
+        }
+
         if (kind == KDecoration) {
             ++report.droppedScenery;
             continue;
@@ -190,7 +223,10 @@ std::unique_ptr<Level> captureLevel(PlayLayer* layer, CaptureReport& report) {
             slopeCorner(entry.rot, object->m_isFlipX, object->m_isFlipY, entry.cornerX,
                         entry.cornerY);
         }
-        if (isDeadly(kind)) entry.round = looksRound(object, entry.w, entry.h);
+        if (isDeadly(kind)) {
+            entry.radius = roundRadius(object);
+            entry.round = entry.radius > 0.f;
+        }
         if (kind == KTeleport) {
             if (auto* portal = typeinfo_cast<TeleportPortalObject*>(object)) {
                 entry.extra = portal->m_teleportYOffset;

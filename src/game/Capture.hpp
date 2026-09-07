@@ -2,6 +2,7 @@
 
 #include "sim/Level.hpp"
 
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -20,6 +21,7 @@ struct CaptureReport {
     int droppedTriggers = 0;
     int droppedScenery = 0;
     int droppedRiding = 0;
+    int learnedHazards = 0;
     bool hasDual = false;
 
     std::string summary() const;
@@ -33,6 +35,18 @@ struct CaptureReport {
 // the level, and the box is the rect the game collides against, with that placement's
 // own rotation and scale already in it.
 std::unique_ptr<Level> captureLevel(PlayLayer* layer, CaptureReport& report);
+
+// Ids the game has been seen to kill a run on.
+//
+// An object's type is usually enough to know it is lethal, and sometimes it is not: a
+// hazard laid flat into the ground can come back as something this reads as scenery, and
+// then the simulator plans a route straight through it. Nothing has to be guessed about
+// it though, because the game names the object every time it kills somebody. What it
+// names is remembered here and treated as deadly from then on, for the rest of the
+// session and every level in it.
+void rememberKiller(int objectId);
+bool isKnownKiller(int objectId);
+std::size_t knownKillerCount();
 
 // The state the game is in right now, written into the level as where a route starts.
 void captureStartState(Level& level, PlayLayer* layer);

@@ -224,10 +224,11 @@ bool Run::innerHits(Obj const& o) const {
     if (!(l < o.right() && r > o.left() && b < o.top() && t > o.bottom())) return false;
 
     if (isDeadly(o.kind) && o.round) {
-        // Nearest point of the player's own box to the middle of the blade.
+        // Nearest point of the player's own box to the middle of the blade, against the
+        // radius the game gave that blade rather than half of the square it is drawn in.
         double nearX = std::min(std::max<double>(o.x, l), r);
         double nearY = std::min(std::max<double>(o.y, b), t);
-        double radius = o.w * 0.5;
+        double radius = o.radius > 0.f ? static_cast<double>(o.radius) : o.w * 0.5;
         double dx = nearX - o.x;
         double dy = nearY - o.y;
         return dx * dx + dy * dy <= radius * radius;

@@ -91,6 +91,12 @@ struct Obj {
     // in. The difference is all in the corners, and the corners are exactly where it
     // matters: a saw sunk into a platform clips anything walking off the edge beside it
     // while the blade itself is nowhere near.
+    //
+    // The radius is the game's own, not half the box: a blade is a good deal smaller
+    // than the square it is drawn in, so taking the box for it makes every saw in the
+    // level bigger than it really is. Zero means the game does not treat this one as
+    // round, and neither do we.
+    float radius = 0.f;
     bool round = false;
 
     // Index into the run's spent list, or -1 for something that cannot be used up.

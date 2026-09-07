@@ -166,6 +166,18 @@ void Overlay::redraw() {
         for (auto const& o : level->objects) {
             if (o.x < around - kReach) continue;
             if (o.x > around + kReach) break;      // objects are sorted by x
+            if (o.round && o.radius > 0.f) {
+                // A blade, drawn as the circle the game collides with rather than the
+                // square it is drawn in.
+                CCPoint ring[16];
+                for (int point = 0; point < 16; ++point) {
+                    double angle = 6.28318530718 * point / 16.0;
+                    ring[point] = ccp(o.x + o.radius * static_cast<float>(std::cos(angle)),
+                                      o.y + o.radius * static_cast<float>(std::sin(angle)));
+                }
+                m_draw->drawPolygon(ring, 16, kNothing, 1.f, colourFor(o.kind));
+                continue;
+            }
             drawBox(m_draw, o.left(), o.bottom(), o.right(), o.top(), colourFor(o.kind));
         }
     }

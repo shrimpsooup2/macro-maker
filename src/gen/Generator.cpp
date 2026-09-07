@@ -27,6 +27,10 @@ constexpr int kAnchorSteps = 8;
 // How long to wait for a level to get going before deciding it never will.
 constexpr int kStartFrames = 300;
 
+// And how long a run may go nowhere at all before it counts as over. Four seconds: long
+// enough for anything the game does of its own accord, short enough not to be a hang.
+constexpr int kStuckFrames = 240;
+
 // A frame's worth of game, which is what an extra update is asked for.
 constexpr double kFrameSeconds = 1.0 / 60.0;
 
@@ -133,6 +137,8 @@ bool Generator::startRecording() {
     m_recorded.clear();
     m_recordHeld = false;
     m_recordFrom = 0;
+    m_stallSteps = -1;
+    m_stallFrames = 0;
     m_runOver = false;
     m_runDied = false;
     m_fromRecording = true;
@@ -181,6 +187,15 @@ void Generator::noteButton(bool down) {
 
 void Generator::runRecordFrame() {
     Engine& engine = Engine::get();
+
+    // A take that has stopped going anywhere is finished, whether or not the game agrees.
+    if (engine.movingSteps() != m_stallSteps) {
+        m_stallSteps = engine.movingSteps();
+        m_stallFrames = 0;
+    } else if (++m_stallFrames > kStuckFrames) {
+        finishRecording("recorded up to where the run stopped");
+        return;
+    }
 
     if (m_runOver) {
         finishRecording(m_runDied ? "recorded up to where the run died"
@@ -231,6 +246,9 @@ bool Generator::suppressingGameplay() const {
 }
 
 void Generator::noteGameDeath(float x, float y, int objectId) {
+    // Worth learning from whether or not a job is running: the person playing the level
+    // finds hazards the simulator has never been shown.
+    rememberKiller(objectId);
     if (!busy()) return;
 
     log::info("{} the game killed the run at x={:.0f} y={:.0f} on object id {} (step {} of the "
@@ -298,11 +316,18 @@ void Generator::normalFrame(GJBaseGameLayer* layer) {
         case Phase::ReplayReset:
             m_replayAt = 0;
             m_lastFedIndex = -1;
+            m_stallSteps = -1;
+            m_stallFrames = 0;
             m_realPath.clear();
             askForReset(Phase::Replaying);
             break;
 
         case Phase::WaitingReset:
+            // The reset happens between frames; if that never comes back, say so rather
+            // than sitting here.
+            if (++m_stallFrames > kStuckFrames) {
+                fail("the level would not go back to the start");
+            }
             break;
 
         case Phase::Starting: {
@@ -381,6 +406,8 @@ void Generator::beforePhysicsStep() {
 void Generator::askForReset(Phase after) {
     m_afterReset = after;
     m_waited = 0;
+    m_stallFrames = 0;
+    m_stallSteps = Engine::get().movingSteps();
     m_runOver = false;
     m_runDied = false;
     Engine::get().clearEvents();
@@ -587,6 +614,23 @@ bool Generator::checkReplayEnded() {
 
     if (m_runOver) {
         finishReplay(!m_runDied);
+        return true;
+    }
+
+    // Wedged. In this game a run that cannot go forward does not necessarily die, and
+    // one that has stopped is not going to finish the level either.
+    if (engine.movingSteps() != m_stallSteps) {
+        m_stallSteps = engine.movingSteps();
+        m_stallFrames = 0;
+    } else if (++m_stallFrames > kStuckFrames) {
+        log::warn("{} the run stopped moving at x={:.0f}, {} steps in", kLogTag, engine.playerX(),
+                  engine.movingSteps());
+        m_diedAt = engine.playerX();
+        m_realEnd = {engine.playerX(), engine.playerY()};
+        m_runDied = true;
+        m_runOver = true;
+        ++m_drawVersion;
+        finishReplay(false);
         return true;
     }
     if (engine.movingSteps() - m_startOffset >= static_cast<int>(m_inputs.size())) {
