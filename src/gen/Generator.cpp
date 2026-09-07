@@ -205,15 +205,23 @@ void Generator::driveFrame() {
     }
 
     if (m_phase == Phase::Capturing) {
+        // What one update of the game is worth has to be measured before anything can be
+        // driven by hand. It is done here, inside the lead-in, so whatever it costs is
+        // behind the step the route starts from.
+        if (!engine.calibrated() && !engine.calibrateStep()) {
+            fail(fmt::format("could not step the level by hand: {}", engine.calibrationNote()));
+            return;
+        }
+
         // Both the capture and every replay of it start from the same step of the run,
         // far enough in that the frame the game happened to hand control over on cannot
         // move it. A tenth of a second is about one block: past anything the level does
         // to get started, and short of anything it can kill you with.
         int anchor = std::max(kAnchorSteps, engine.movingSteps());
         if (engine.driveToStep(anchor, kDriveLimit) < 0) {
-            fail(fmt::format("the run stopped at step {} (x={:.0f}, dead={})",
-                             engine.movingSteps(), engine.playerX(),
-                             engine.playerIsDead() ? 1 : 0));
+            fail(fmt::format("the run stopped at step {} of {} (x={:.0f}, dead={}, {})",
+                             engine.movingSteps(), anchor, engine.playerX(),
+                             engine.playerIsDead() ? 1 : 0, engine.calibrationNote()));
             return;
         }
         m_startOffset = engine.movingSteps();
@@ -224,6 +232,9 @@ void Generator::driveFrame() {
             return;
         }
         captureStartState(*m_level, m_layer);
+
+        log::info("{} stepping the level by hand: {}, route starts at step {}", kLogTag,
+                  engine.calibrationNote(), m_startOffset);
 
         if (settings().debugLog) {
             log::info("{} {}", kLogTag, m_capture.summary());
@@ -265,12 +276,16 @@ void Generator::driveFrame() {
         m_replayWarm = true;
     }
 
+    // Normally one update is one physics step. Where the game refuses to be stepped that
+    // finely, the route still has to advance at the rate it was found at, so the clock
+    // moves by whatever an update actually buys.
+    int perUpdate = std::max(1, engine.stepsPerUpdate());
     bool fast = m_replayVerifying && settings().verify == VerifyMode::Fast;
     auto until = Clock::now() + std::chrono::duration_cast<Clock::duration>(
                                     std::chrono::duration<double, std::milli>(settings().verifyMs));
 
     for (int taken = 0;; ++taken) {
-        if (!fast && taken >= kWatchStepsPerFrame) return;
+        if (!fast && taken * perUpdate >= kWatchStepsPerFrame) return;
         if (fast && taken > 0 && (taken & 7) == 0 && Clock::now() > until) return;
 
         if (m_replayAt >= static_cast<int>(m_inputs.size())) {
@@ -280,7 +295,7 @@ void Generator::driveFrame() {
 
         engine.setHeld(m_inputs[static_cast<std::size_t>(m_replayAt)] != 0);
         StepResult result = engine.stepOnce();
-        ++m_replayAt;
+        m_replayAt += perUpdate;
         m_realPath.emplace_back(engine.playerX(), engine.playerY());
 
         if (result == StepResult::Finished) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 class PlayLayer;
 class GJBaseGameLayer;
@@ -39,7 +40,20 @@ public:
     bool shouldSwallowUpdate(GJBaseGameLayer* layer) const;
     bool shouldPinDelta(GJBaseGameLayer* layer) const;
 
-    double stepDelta() const { return 1.0 / 240.0; }
+    double stepDelta() const { return m_stepDelta; }
+
+    // What one call to the game's update is worth, worked out by trying it.
+    //
+    // The game decides how many physics steps a frame is worth from the delta it is
+    // handed, and the arithmetic it uses is not something to guess at: a delta of
+    // exactly one step's length can land a hair under the boundary and buy nothing at
+    // all, which looks from outside like a level that refuses to move. So the delta is
+    // measured against the run's own step clock instead -- feed the game a length, count
+    // the steps that came out, and keep the smallest length that reliably buys one.
+    bool calibrateStep();
+    bool calibrated() const { return m_calibrated; }
+    int stepsPerUpdate() const { return m_stepsPerUpdate; }
+    std::string calibrationNote() const { return m_calibration; }
 
     // A click is a jump press on player one. Repeating the same value costs nothing.
     void setHeld(bool held);
@@ -107,6 +121,12 @@ private:
 
     int m_movingSteps = 0;
     float m_lastPlayerX = -1e9f;
+
+    double m_stepDelta = 1.0 / 240.0;
+    bool m_pinDelta = true;
+    bool m_calibrated = false;
+    int m_stepsPerUpdate = 1;
+    std::string m_calibration;
 };
 
 } // namespace mm

@@ -39,6 +39,15 @@ void Engine::attach(PlayLayer* layer) {
     m_died = false;
     m_completed = false;
     m_steps = 0;
+
+    // Every level works its step length out afresh: it is a property of how this level
+    // is running, not of the machine.
+    m_calibrated = false;
+    m_pinDelta = true;
+    m_stepDelta = 1.0 / 240.0;
+    m_stepsPerUpdate = 1;
+    m_calibration.clear();
+    resetStepClock();
 }
 
 void Engine::detach() {
@@ -69,7 +78,72 @@ bool Engine::shouldSwallowUpdate(GJBaseGameLayer* layer) const {
 }
 
 bool Engine::shouldPinDelta(GJBaseGameLayer* layer) const {
-    return m_inStep && owns(layer);
+    return m_pinDelta && m_inStep && owns(layer);
+}
+
+bool Engine::calibrateStep() {
+    if (!m_layer) return false;
+    if (m_calibrated) return true;
+
+    // Pinned lengths first, since a fixed length is what makes a replay land on the same
+    // frames every time. Letting the game work the delta out itself is the last resort:
+    // it works, but its own accumulator decides where the step boundaries fall.
+    struct Attempt {
+        bool pin;
+        double factor;
+    };
+    constexpr double kBase = 1.0 / 240.0;
+    constexpr Attempt kAttempts[] = {
+        {true, 1.0},  {true, 1.00002}, {true, 1.0005}, {true, 1.005}, {true, 1.05},
+        {true, 1.25}, {true, 2.0},     {true, 4.0},    {false, 1.0},
+    };
+    constexpr int kCallsPerAttempt = 8;
+
+    setHeld(false);
+    m_calibration.clear();
+
+    for (auto const& attempt : kAttempts) {
+        m_pinDelta = attempt.pin;
+        m_stepDelta = kBase * attempt.factor;
+
+        int before = m_movingSteps;
+        for (int call = 0; call < kCallsPerAttempt; ++call) {
+            m_inStep = true;
+            m_layer->update(static_cast<float>(m_stepDelta));
+            m_inStep = false;
+            ++m_steps;
+            if (m_died || playerIsDead()) break;
+        }
+        int gained = m_movingSteps - before;
+
+        log::info("[macro-maker] one update of {:.9f}s ({}) bought {} step(s) in {} calls",
+                  m_stepDelta, attempt.pin ? "pinned" : "the game's own delta", gained,
+                  kCallsPerAttempt);
+
+        if (gained >= kCallsPerAttempt) {
+            m_stepsPerUpdate = gained / kCallsPerAttempt;
+            m_calibrated = true;
+            m_calibration = fmt::format("{} {:.9f}s, {} step(s) per update",
+                                        attempt.pin ? "pinned" : "free", m_stepDelta,
+                                        m_stepsPerUpdate);
+            if (m_stepsPerUpdate > 1) {
+                log::warn("[macro-maker] the smallest update this game will take is {} physics "
+                          "steps, so routes cannot be frame exact",
+                          m_stepsPerUpdate);
+            }
+            return true;
+        }
+
+        if (m_died || playerIsDead()) {
+            m_calibration = "the run died while working out the step length";
+            return false;
+        }
+    }
+
+    m_calibration = "no update length moved the run at all";
+    m_pinDelta = true;
+    m_stepDelta = kBase;
+    return false;
 }
 
 void Engine::setHeld(bool held) {
