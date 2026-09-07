@@ -121,6 +121,7 @@ std::string pauseButtonLabel() {
     Generator const& generator = Generator::get();
     switch (generator.phase()) {
         case Phase::Resetting:
+        case Phase::WaitingReset:
         case Phase::Starting:
         case Phase::Searching:
         case Phase::ReplayReset:

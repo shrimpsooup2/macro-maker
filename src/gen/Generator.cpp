@@ -142,16 +142,21 @@ bool Generator::startRecording() {
     m_phase = Phase::Recording;
 
     // From the top, so the take covers the whole attempt.
-    m_selfReset = true;
-    Engine::get().resetLevel();
-    m_selfReset = false;
+    queueInMainThread([this] {
+        if (m_phase != Phase::Recording) return;
+        m_selfReset = true;
+        Engine::get().resetLevel();
+        m_selfReset = false;
 
-    // Where the game's clock stands once the level is back at the start. Everything is
-    // written down relative to this and the number is added back on the way out, so it
-    // does not matter whether the game zeroes that clock on a reset or keeps counting.
-    m_recordFrom = Engine::get().gameFrame();
-    log::info("{} recording from frame {} ({:.4f}s of level time)", kLogTag, m_recordFrom,
-              Engine::get().levelTime());
+        // Where the game's clock stands once the level is back at the start. Everything
+        // is written down relative to this and the number is added back on the way out,
+        // so it does not matter whether the game zeroes that clock on a reset.
+        m_recordFrom = Engine::get().gameFrame();
+        m_recorded.clear();
+        m_recordHeld = false;
+        log::info("{} recording from frame {} ({:.4f}s of level time)", kLogTag, m_recordFrom,
+                  Engine::get().levelTime());
+    });
     return true;
 }
 
@@ -285,24 +290,18 @@ void Generator::normalFrame(GJBaseGameLayer* layer) {
 
     switch (m_phase) {
         case Phase::Resetting:
-        case Phase::ReplayReset: {
-            m_selfReset = true;
-            engine.resetLevel();
-            m_selfReset = false;
-            m_waited = 0;
-            m_runOver = false;
-            m_runDied = false;
-            engine.clearEvents();
-            if (m_phase == Phase::Resetting) {
-                m_phase = Phase::Starting;
-            } else {
-                m_replayAt = 0;
-                m_lastFedIndex = -1;
-                m_realPath.clear();
-                m_phase = Phase::Replaying;
-            }
+            askForReset(Phase::Starting);
             break;
-        }
+
+        case Phase::ReplayReset:
+            m_replayAt = 0;
+            m_lastFedIndex = -1;
+            m_realPath.clear();
+            askForReset(Phase::Replaying);
+            break;
+
+        case Phase::WaitingReset:
+            break;
 
         case Phase::Starting: {
             ++m_waited;
@@ -365,6 +364,33 @@ void Generator::beforePhysicsStep() {
         m_replayAt = index + 1;
         m_realPath.emplace_back(engine.playerX(), engine.playerY());
     }
+}
+
+// Putting the level back to the start, from between two frames rather than from inside
+// one.
+//
+// This was the phantom. Called from inside the game's own update -- which is where the
+// mod's frame handling lives -- a reset left the level half rebuilt for the rest of that
+// frame, and the next collision check ran against whatever the old state still said was
+// there. What came out was a spike sitting exactly where the player had been a step
+// earlier, killing every run on its first step, in a level whose first real spike is
+// five hundred units away. The game never calls resetLevel from there and neither do we
+// now: it is queued, and the phase moves on when the game says the reset has happened.
+void Generator::askForReset(Phase after) {
+    m_afterReset = after;
+    m_waited = 0;
+    m_runOver = false;
+    m_runDied = false;
+    Engine::get().clearEvents();
+    m_phase = Phase::WaitingReset;
+
+    queueInMainThread([this] {
+        if (m_phase != Phase::WaitingReset) return;
+        m_selfReset = true;
+        Engine::get().resetLevel();
+        m_selfReset = false;
+        m_phase = m_afterReset;
+    });
 }
 
 void Generator::captureNow() {
@@ -658,9 +684,14 @@ void Generator::release() {
     Engine& engine = Engine::get();
     engine.unfreeze();
     if (!engine.valid()) return;
-    m_selfReset = true;
-    engine.resetLevel();
-    m_selfReset = false;
+
+    queueInMainThread([this] {
+        Engine& late = Engine::get();
+        if (!late.valid()) return;
+        m_selfReset = true;
+        late.resetLevel();
+        m_selfReset = false;
+    });
 }
 
 void Generator::fail(std::string why) {
@@ -680,6 +711,7 @@ void Generator::settle(std::string note) {
 std::string Generator::headline() const {
     switch (m_phase) {
         case Phase::Resetting:
+        case Phase::WaitingReset:
         case Phase::Starting:
             return "Reading the level";
         case Phase::Searching:
@@ -704,6 +736,7 @@ std::string Generator::detail() const {
 
     switch (m_phase) {
         case Phase::Resetting:
+        case Phase::WaitingReset:
         case Phase::Starting:
             return "";
         case Phase::Searching: {

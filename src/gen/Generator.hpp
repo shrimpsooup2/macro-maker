@@ -17,6 +17,7 @@ namespace mm {
 enum class Phase {
     Idle,
     Resetting,      // asked the game to put the level back to the start
+    WaitingReset,   // the reset is queued, to happen between frames rather than inside one
     Starting,       // letting the game run the opening of the level itself
     Searching,      // the level is frozen while a worker thread looks for a route
     ReplayReset,    // asked for a reset before playing a route back
@@ -85,6 +86,7 @@ public:
 private:
     Generator() = default;
 
+    void askForReset(Phase after);
     void captureNow();
     void launchSearch();
     void collectSearch();
@@ -154,6 +156,7 @@ private:
     bool m_runDied = false;
 
     bool m_selfReset = false;
+    Phase m_afterReset = Phase::Idle;
     bool m_finishedInGame = false;
     double m_diedAt = 0.0;
 
