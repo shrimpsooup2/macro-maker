@@ -20,7 +20,7 @@ namespace mm {
 namespace {
 
 // How near a ramp counts as worth writing down.
-constexpr float kNear = 120.f;
+constexpr float kNear = 45.f;
 
 // Enough for a good few passes at a slope without letting the file run away.
 constexpr std::size_t kMaxRows = 40000;
@@ -93,11 +93,18 @@ void slopeProbeStep(PlayLayer* layer) {
     float py = player->getPositionY();
     ++state.step;
 
-    // The nearest ramp, and only while the run is beside it.
+    auto const& rect = player->getObjectRect();
+
+    // The ramp the run is actually on, which means near in both directions. Picking the
+    // nearest by how far along the level it is logged a great many steps spent thirty
+    // units underneath a ramp the run never touched, and those say nothing about riding.
     Ramp const* nearest = nullptr;
-    float best = kNear;
+    float best = 1e9f;
     for (auto const& ramp : state.ramps) {
-        float gap = std::abs(ramp.x - px);
+        float gapX = std::abs(ramp.x - px) - ramp.w * 0.5f;
+        float gapY = std::abs(ramp.y - py) - ramp.h * 0.5f;
+        if (gapX > kNear || gapY > kNear) continue;
+        float gap = std::max(gapX, 0.f) + std::max(gapY, 0.f);
         if (gap < best) {
             best = gap;
             nearest = &ramp;
@@ -105,21 +112,25 @@ void slopeProbeStep(PlayLayer* layer) {
     }
     if (!nearest) return;
 
-    auto const& rect = player->getObjectRect();
+    // Where the run's feet are against that ramp's box, and how far across it they are:
+    // between them those say whether it is riding the face, standing on the flat, or
+    // going past underneath.
+    float footAbove = rect.getMinY() - (nearest->y - nearest->h * 0.5f);
+    float acrossFrom = px - (nearest->x - nearest->w * 0.5f);
     if (state.rows.empty()) {
         state.rows =
-            "step,x,y,vel,on_ground,mode,mini,speed,box_bottom,box_top,ramp_id,ramp_x,ramp_y,"
-            "ramp_w,ramp_h,ramp_rot,flip_x,flip_y\n";
+            "step,x,y,vel,on_ground,mode,mini,speed,box_bottom,box_top,across_ramp,foot_above,"
+            "ramp_id,ramp_x,ramp_y,ramp_w,ramp_h,ramp_rot,flip_x,flip_y\n";
     }
 
     Engine& engine = Engine::get();
     state.rows += fmt::format(
-        "{},{:.4f},{:.4f},{:.5f},{},{},{},{},{:.4f},{:.4f},{},{:.2f},{:.2f},{:.2f},{:.2f},{:.1f},"
-        "{},{}\n",
+        "{},{:.4f},{:.4f},{:.5f},{},{},{},{},{:.4f},{:.4f},{:.4f},{:.4f},{},{:.2f},{:.2f},{:.2f},"
+        "{:.2f},{:.1f},{},{}\n",
         state.step, px, py, player->m_yVelocity, player->m_isOnGround ? 1 : 0,
         modeName(engine.playerMode()), engine.playerMini() ? 1 : 0, engine.playerSpeed(),
-        rect.getMinY(), rect.getMaxY(), nearest->id, nearest->x, nearest->y, nearest->w,
-        nearest->h, nearest->rot, nearest->flipX ? 1 : 0, nearest->flipY ? 1 : 0);
+        rect.getMinY(), rect.getMaxY(), acrossFrom, footAbove, nearest->id, nearest->x, nearest->y,
+        nearest->w, nearest->h, nearest->rot, nearest->flipX ? 1 : 0, nearest->flipY ? 1 : 0);
     ++state.count;
 }
 
