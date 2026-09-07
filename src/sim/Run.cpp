@@ -625,6 +625,7 @@ void Run::collide() {
 }
 
 void Run::applyBand() {
+    if (!level || !level->useBands) return;
     if (!hasBand || !isFlyingMode(p.mode)) return;
     double half = kBandHeight * 0.5;
     double low = bandCentre - half;

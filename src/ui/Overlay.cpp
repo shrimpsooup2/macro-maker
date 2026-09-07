@@ -182,6 +182,24 @@ void Overlay::redraw() {
         }
     }
 
+    // The band a flying mode would be held inside, when that is switched on at all.
+    if (Level const* level = generator.capturedLevel()) {
+        if (level->useBands) {
+            for (auto const& o : level->objects) {
+                if (o.x < around - kReach) continue;
+                if (o.x > around + kReach) break;
+                if (modeOfPortal(o.kind) < 0) continue;
+                int mode = modeOfPortal(o.kind);
+                if (mode != Ship && mode != Ufo && mode != Wave && mode != Swing) continue;
+                float half = static_cast<float>(kBandHeight * 0.5);
+                m_draw->drawSegment(ccp(o.x, o.y - half), ccp(o.x + 600.f, o.y - half), 0.8f,
+                                    kGround);
+                m_draw->drawSegment(ccp(o.x, o.y + half), ccp(o.x + 600.f, o.y + half), 0.8f,
+                                    kGround);
+            }
+        }
+    }
+
     drawPath(m_draw, generator.plannedPath(), around, kPlanned);
     drawPath(m_draw, generator.realPath(), around, kReal);
 

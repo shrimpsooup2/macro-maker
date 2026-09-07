@@ -3,6 +3,7 @@
 #include "Engine.hpp"
 
 #include "sim/Run.hpp"
+#include "settings/Settings.hpp"
 
 #include <Geode/Bindings.hpp>
 #include <Geode/Geode.hpp>
@@ -258,6 +259,7 @@ std::unique_ptr<Level> captureLevel(PlayLayer* layer, CaptureReport& report) {
 
     level->length = layer->m_levelLength;
     level->hasDual = report.hasDual;
+    level->useBands = settings().flyingLimits;
     level->movedObjects = report.droppedMoving;
     level->triggerCount = report.droppedTriggers;
 

@@ -147,6 +147,11 @@ public:
     int triggerCount = 0;
     bool hasDual = false;
 
+    // Whether a flying mode is held inside a band measured from the portal that started
+    // it. The recordings showed one and play says otherwise, so it is a choice rather
+    // than a fact, and the choice is off.
+    bool useBands = false;
+
     void build();                   // buckets and limits, once the objects are in
 
     // Everything that could be touched around x. Not thread safe: the span cache means

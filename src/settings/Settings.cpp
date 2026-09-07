@@ -105,6 +105,7 @@ void SettingsCache::refresh() {
 
     next.autoPlay = boolSetting("auto-play", false);
 
+    next.flyingLimits = boolSetting("flying-limits", false);
     next.showOverlay = boolSetting("show-overlay", false);
     next.showHud = boolSetting("show-hud", true);
     next.hudY = std::clamp(floatSetting("hud-y", 0.82), 0.1, 0.98);
