@@ -36,6 +36,23 @@ struct MacroPlayLayer : geode::Modify<MacroPlayLayer, PlayLayer> {
     // with nothing in it. The game is better at running its own level than we are.
     void destroyPlayer(PlayerObject* player, GameObject* object) {
         if (player == m_player1) {
+            // Everything there is to know about whatever did it. A spike that sits on
+            // the player and kills it on the first step is either something the level
+            // really contains or something wearing an object's clothes, and the two look
+            // identical until you ask where it is and how big it is.
+            if (object) {
+                auto const& rect = object->getObjectRect();
+                log::info("{} killed by id {} type {} at ({:.1f}, {:.1f}) size {:.1f}x{:.1f} "
+                          "radius {:.1f} notouch={} noeffects={} block1={} block2={}",
+                          mm::kLogTag, object->m_objectID,
+                          static_cast<int>(object->m_objectType),
+                          rect.origin.x + rect.size.width * 0.5f,
+                          rect.origin.y + rect.size.height * 0.5f, rect.size.width,
+                          rect.size.height, object->m_objectRadius,
+                          object->m_isNoTouch ? 1 : 0, object->m_hasNoEffects ? 1 : 0,
+                          object == m_player1CollisionBlock ? 1 : 0,
+                          object == m_player2CollisionBlock ? 1 : 0);
+            }
             mm::Generator::get().noteGameDeath(player ? player->getPositionX() : 0.f,
                                                player ? player->getPositionY() : 0.f,
                                                object ? object->m_objectID : -1);
