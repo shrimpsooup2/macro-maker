@@ -11,7 +11,12 @@
     "version": "v1.0.0",
     "developer": "andre",
     "description": "Works out a way through the level with measured 2.2 physics, checks it by playing it, and writes the result out as a macro.",
-    "tags": ["utility", "offline", "gameplay", "developer"],
+    "tags": [
+        "utility",
+        "offline",
+        "gameplay",
+        "developer"
+    ],
     "settings": {
         "search-title": {
             "type": "title",
@@ -20,7 +25,12 @@
         "effort": {
             "type": "string",
             "default": "Balanced",
-            "one-of": ["Quick", "Balanced", "Thorough", "Custom"],
+            "one-of": [
+                "Quick",
+                "Balanced",
+                "Thorough",
+                "Custom"
+            ],
             "name": "Effort",
             "description": "How much searching each attempt is allowed. Quick is a first look, Thorough keeps a wide beam alive and takes minutes on a long level. Custom uses the three numbers below."
         },
@@ -64,7 +74,11 @@
         "verify": {
             "type": "string",
             "default": "Fast",
-            "one-of": ["Fast", "Watch", "Off"],
+            "one-of": [
+                "Fast",
+                "Watch",
+                "Off"
+            ],
             "name": "Play It Back To Check",
             "description": "A route is found in the simulator, which is measured but is not the game. Fast replays it through the real game as quickly as the machine allows; Watch replays it at normal speed so you can see it; Off writes the macro without checking it."
         },
@@ -94,11 +108,23 @@
             "type": "title",
             "name": "What Gets Written"
         },
-        "write-gdr": {
+        "write-gdr2": {
             "type": "bool",
             "default": true,
+            "name": "GDR2 (.gdr2)",
+            "description": "The binary format Eclipse Menu and the newer bots read. This is the one to leave on."
+        },
+        "send-to-eclipse": {
+            "type": "bool",
+            "default": true,
+            "name": "Put It In Eclipse Menu's List",
+            "description": "Also drop the .gdr2 straight into Eclipse Menu's own replays folder, so it shows up in its macro list with nothing to move by hand."
+        },
+        "write-gdr": {
+            "type": "bool",
+            "default": false,
             "name": "GDReplayFormat (.gdr.json)",
-            "description": "The format most Geode bots read, xdBot among them."
+            "description": "The older JSON shape. Some bots still read it; Eclipse Menu does not."
         },
         "write-mhr": {
             "type": "bool",
@@ -169,19 +195,25 @@
         },
         "key-make": {
             "type": "keybind",
-            "default": ["G"],
+            "default": [
+                "G"
+            ],
             "name": "Make A Macro For This Level",
             "category": "gameplay"
         },
         "key-play": {
             "type": "keybind",
-            "default": ["H"],
+            "default": [
+                "H"
+            ],
             "name": "Play The Macro",
             "category": "gameplay"
         },
         "key-stop": {
             "type": "keybind",
-            "default": ["J"],
+            "default": [
+                "J"
+            ],
             "name": "Stop",
             "category": "gameplay"
         },

@@ -94,7 +94,9 @@ void SettingsCache::refresh() {
     next.verifyRounds = std::clamp(intSetting("verify-rounds", 4), 0, 20);
     next.verifyMs = std::clamp(floatSetting("verify-ms", 10.0), 2.0, 60.0);
 
-    next.writeGdr = boolSetting("write-gdr", true);
+    next.writeGdr2 = boolSetting("write-gdr2", true);
+    next.sendToEclipse = boolSetting("send-to-eclipse", true);
+    next.writeGdr = boolSetting("write-gdr", false);
     next.writeMhr = boolSetting("write-mhr", true);
     next.writePlain = boolSetting("write-plain", false);
     next.extraFolder = stringSetting("extra-folder", "");

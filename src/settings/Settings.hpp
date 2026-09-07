@@ -31,7 +31,9 @@ struct Snapshot {
     int verifyRounds = 4;
     double verifyMs = 10.0;
 
-    bool writeGdr = true;
+    bool writeGdr2 = true;
+    bool sendToEclipse = true;
+    bool writeGdr = false;
     bool writeMhr = true;
     bool writePlain = false;
     std::string extraFolder;

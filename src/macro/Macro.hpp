@@ -36,9 +36,11 @@ struct MacroFiles {
 };
 
 struct MacroFormats {
-    bool gdr = true;
+    bool gdr2 = true;       // the binary one Eclipse Menu and the newer bots read
+    bool gdr = true;        // the older JSON one
     bool mhr = true;
     bool plain = false;
+    bool toEclipse = true;  // drop a copy in Eclipse Menu's own replays folder
     std::string extraFolder;
 };
 

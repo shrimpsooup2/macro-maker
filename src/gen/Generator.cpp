@@ -489,6 +489,8 @@ void Generator::writeOut(bool complete) {
     info.startOffset = m_startOffset;
 
     MacroFormats formats;
+    formats.gdr2 = settings().writeGdr2;
+    formats.toEclipse = settings().sendToEclipse;
     formats.gdr = settings().writeGdr;
     formats.mhr = settings().writeMhr;
     formats.plain = settings().writePlain;
