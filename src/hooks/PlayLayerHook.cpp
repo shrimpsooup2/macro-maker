@@ -30,6 +30,15 @@ struct MacroPlayLayer : geode::Modify<MacroPlayLayer, PlayLayer> {
     // wrong, not the player losing a run, so the game is never told it happened: the
     // level would restart underneath us and the answer would be lost.
     void destroyPlayer(PlayerObject* player, GameObject* object) {
+        if (mm::Generator::get().busy()) {
+            // Which object, and where. A route that dies somewhere the simulator was
+            // happy is the whole point of checking it, and the answer is only useful if
+            // it names what did it.
+            log::info("{} the game killed the run at x={:.1f} y={:.1f} on object id {} (player {})",
+                      mm::kLogTag, player ? player->getPositionX() : -1.f,
+                      player ? player->getPositionY() : -1.f, object ? object->m_objectID : -1,
+                      player == m_player1 ? 1 : 2);
+        }
         mm::Engine::get().notifyDeath();
         if (mm::Generator::get().suppressingGameplay()) return;
         PlayLayer::destroyPlayer(player, object);

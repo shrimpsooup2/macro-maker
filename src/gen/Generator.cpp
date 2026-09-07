@@ -337,6 +337,8 @@ void Generator::collectSearch() {
     m_pending = SearchResult{};
     m_inputs = m_result.inputs;
 
+    log::info("{} the run sat on step {} while the search ran (it was read at {})", kLogTag,
+              Engine::get().movingSteps(), m_startOffset);
     log::info("{} round {}: {} at {} after {} states{}", kLogTag, m_round,
               m_result.solved ? "solved" : "stopped",
               percentOf(m_result.reachedX, m_result.length), m_result.expansions,
@@ -405,6 +407,11 @@ bool Generator::checkReplayEnded() {
     }
     if (engine.sawDeath() || engine.playerIsDead()) {
         m_diedAt = engine.playerX();
+        int index = engine.movingSteps() - m_startOffset;
+        log::info("{} the replay ended at x={:.0f}: step {} of the run, {} of the route, "
+                  "reported={}, flagged={}",
+                  kLogTag, m_diedAt, engine.movingSteps(), index, engine.sawDeath() ? 1 : 0,
+                  engine.playerIsDead() ? 1 : 0);
         finishReplay(false);
         return true;
     }
