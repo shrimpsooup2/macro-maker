@@ -119,6 +119,18 @@ Run::Run(Level const& lvl) {
         m_spent = std::make_shared<std::vector<std::uint8_t>>(
             static_cast<std::size_t>(lvl.consumableCount), 0u);
     }
+
+    // A run captured part way through a ship section is already inside that section's
+    // band, and nothing on the player says where the band is: only the portal that
+    // started the mode does. The last one behind the start is the one it came through.
+    if (isFlyingMode(p.mode)) {
+        hasBand = true;
+        bandCentre = p.y;
+        for (auto const& o : lvl.objects) {
+            if (o.x > x) break;
+            if (modeOfPortal(o.kind) == p.mode) bandCentre = o.y;
+        }
+    }
 }
 
 void Run::takeCopyOfSpent() {

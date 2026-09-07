@@ -148,9 +148,10 @@ public:
     bool hasDual = false;
 
     // Whether a flying mode is held inside a band measured from the portal that started
-    // it. The recordings showed one and play says otherwise, so it is a choice rather
-    // than a fact, and the choice is off.
-    bool useBands = false;
+    // it. It is, and the simulator was letting runs climb straight through it whenever
+    // the run began already flying, because a band only existed once a portal had been
+    // touched. A capture taken part way through a ship section had no band at all.
+    bool useBands = true;
 
     void build();                   // buckets and limits, once the objects are in
 

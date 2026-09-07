@@ -69,9 +69,9 @@
         },
         "flying-limits": {
             "type": "bool",
-            "default": false,
+            "default": true,
             "name": "Flying Modes Are Held In A Band",
-            "description": "Whether a ship, UFO, wave or swing is stopped by an invisible ceiling and floor either side of the portal that started it. Off, because play says there is no such thing; turn it on if you find a level where the game does hold a flying mode in."
+            "description": "Whether a ship, UFO, wave or swing is held between an invisible ceiling and floor either side of the portal that started it, the way the game does. Leave this on: without it the search plans climbs that the game will not let a run make."
         },
         "verify-title": {
             "type": "title",

@@ -42,7 +42,7 @@ struct Snapshot {
 
     bool autoPlay = false;
 
-    bool flyingLimits = false;
+    bool flyingLimits = true;
     bool showOverlay = false;
     bool showHud = true;
     double hudY = 0.82;

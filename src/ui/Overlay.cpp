@@ -182,20 +182,28 @@ void Overlay::redraw() {
         }
     }
 
-    // The band a flying mode would be held inside, when that is switched on at all.
+    // The ceiling and floor each flying section is held between, drawn from the portal
+    // that sets them to the portal that ends them.
     if (Level const* level = generator.capturedLevel()) {
         if (level->useBands) {
-            for (auto const& o : level->objects) {
-                if (o.x < around - kReach) continue;
+            for (std::size_t index = 0; index < level->objects.size(); ++index) {
+                Obj const& o = level->objects[index];
                 if (o.x > around + kReach) break;
-                if (modeOfPortal(o.kind) < 0) continue;
                 int mode = modeOfPortal(o.kind);
                 if (mode != Ship && mode != Ufo && mode != Wave && mode != Swing) continue;
+
+                float until = static_cast<float>(level->length);
+                for (std::size_t next = index + 1; next < level->objects.size(); ++next) {
+                    if (modeOfPortal(level->objects[next].kind) >= 0) {
+                        until = level->objects[next].x;
+                        break;
+                    }
+                }
+                if (until < around - kReach) continue;
+
                 float half = static_cast<float>(kBandHeight * 0.5);
-                m_draw->drawSegment(ccp(o.x, o.y - half), ccp(o.x + 600.f, o.y - half), 0.8f,
-                                    kGround);
-                m_draw->drawSegment(ccp(o.x, o.y + half), ccp(o.x + 600.f, o.y + half), 0.8f,
-                                    kGround);
+                m_draw->drawSegment(ccp(o.x, o.y - half), ccp(until, o.y - half), 0.8f, kGround);
+                m_draw->drawSegment(ccp(o.x, o.y + half), ccp(until, o.y + half), 0.8f, kGround);
             }
         }
     }
