@@ -114,6 +114,18 @@ bool Engine::levelStarted() const {
     return m_layer && m_layer->m_started;
 }
 
+double Engine::levelTime() const {
+    return m_layer ? m_layer->m_gameState.m_levelTime : 0.0;
+}
+
+int Engine::gameFrame() const {
+    return static_cast<int>(std::llround(levelTime() * 240.0));
+}
+
+unsigned int Engine::levelProgress() const {
+    return m_layer ? m_layer->m_gameState.m_currentProgress : 0u;
+}
+
 float Engine::playerX() const {
     auto* player = m_layer ? m_layer->m_player1 : nullptr;
     return player ? player->getPositionX() : 0.f;

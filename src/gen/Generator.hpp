@@ -116,6 +116,11 @@ private:
     // exactly this step, whichever frame the game happens to reach it on.
     int m_startOffset = 0;
 
+    // The same moment on the game's own clock, which is what a macro is written in: a
+    // bot playing it back counts every physics step from the level's start, including
+    // the ones our step clock skips because nothing moved yet.
+    int m_startFrame = 0;
+
     // Whether running the game beyond its own frames actually advances it. If it does
     // not, a check simply happens at normal speed instead of failing.
     bool m_fastWorks = true;

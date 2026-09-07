@@ -100,6 +100,7 @@ void SettingsCache::refresh() {
     next.writeMhr = boolSetting("write-mhr", true);
     next.writePlain = boolSetting("write-plain", false);
     next.extraFolder = stringSetting("extra-folder", "");
+    next.frameOffset = std::clamp(intSetting("frame-offset", 0), -240, 240);
     next.savePartial = boolSetting("save-partial", true);
 
     next.autoPlay = boolSetting("auto-play", false);

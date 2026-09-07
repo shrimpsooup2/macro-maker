@@ -120,6 +120,17 @@
             "name": "Put It In Eclipse Menu's List",
             "description": "Also drop the .gdr2 straight into Eclipse Menu's own replays folder, so it shows up in its macro list with nothing to move by hand."
         },
+        "frame-offset": {
+            "type": "int",
+            "default": 0,
+            "min": -240,
+            "max": 240,
+            "name": "Macro Frame Offset",
+            "description": "Shifts every frame number written into a macro. Macros are timed off the game's own level clock, which should line up with whatever bot plays them; if yours presses consistently early, raise this, and if it presses late, lower it. 240 is one second.",
+            "control": {
+                "slider": false
+            }
+        },
         "write-gdr": {
             "type": "bool",
             "default": false,

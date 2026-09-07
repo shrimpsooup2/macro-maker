@@ -66,6 +66,14 @@ public:
     void ensureLevelStarted();
     bool levelStarted() const;
 
+    // The game's own clocks. A macro is played back by somebody else's bot counting its
+    // own frames from the start of the level, and our step clock deliberately does not
+    // count the steps the run spent not moving -- so the number written into a macro
+    // comes from the game rather than from us.
+    double levelTime() const;
+    int gameFrame() const;              // level time in physics steps
+    unsigned int levelProgress() const;
+
     float playerX() const;
     float playerY() const;
     double playerVelocityY() const;

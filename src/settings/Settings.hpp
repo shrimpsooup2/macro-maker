@@ -37,6 +37,7 @@ struct Snapshot {
     bool writeMhr = true;
     bool writePlain = false;
     std::string extraFolder;
+    int frameOffset = 0;
     bool savePartial = true;
 
     bool autoPlay = false;

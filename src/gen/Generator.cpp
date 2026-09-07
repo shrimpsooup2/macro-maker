@@ -245,6 +245,7 @@ void Generator::captureNow() {
     // should move under it while that happens.
     engine.freeze();
     m_startOffset = engine.movingSteps();
+    m_startFrame = engine.gameFrame() + settings().frameOffset;
 
     m_level = captureLevel(m_layer, m_capture);
     if (!m_level || m_level->objects.empty()) {
@@ -255,6 +256,10 @@ void Generator::captureNow() {
 
     log::info("{} read the level at step {} (x={:.0f}, y={:.0f}), {} objects kept", kLogTag,
               m_startOffset, m_level->startX, m_level->start.y, m_capture.kept);
+    log::info("{} the clocks at that moment: {} steps moved, {:.4f}s of level time ({} steps), "
+              "progress {}; macros are written from frame {}",
+              kLogTag, m_startOffset, engine.levelTime(), engine.gameFrame(),
+              engine.levelProgress(), m_startFrame);
 
     // What is within reach of the run as it stands. A route that dies on its first step
     // is either standing in something or being told it is, and the difference is visible
@@ -486,7 +491,7 @@ void Generator::writeOut(bool complete) {
     info.complete = complete;
     info.reachedPercent =
         complete ? 100.0 : 100.0 * m_result.reachedX / std::max(1.0, m_result.length);
-    info.startOffset = m_startOffset;
+    info.startOffset = m_startFrame;
 
     MacroFormats formats;
     formats.gdr2 = settings().writeGdr2;
