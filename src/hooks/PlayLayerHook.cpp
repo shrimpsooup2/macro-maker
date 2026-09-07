@@ -67,14 +67,23 @@ struct MacroPlayLayer : geode::Modify<MacroPlayLayer, PlayLayer> {
             // identical until you ask where it is and how big it is.
             if (object) {
                 auto const& rect = object->getObjectRect();
-                log::info("{} killed by id {} type {} at ({:.1f}, {:.1f}) size {:.1f}x{:.1f} "
-                          "radius {:.1f} notouch={} noeffects={} block1={} block2={}",
+                // Two ways of asking where it is. The rect is a cached thing the game
+                // keeps on the object; the position is the node's own. When a spike
+                // reports itself at the spawn while the player is nowhere near the
+                // spawn, one of these is stale, and knowing which decides whether the
+                // phantom is in the level or in what this mod reads out of it.
+                log::info("{} killed by id {} type {} | rect ({:.1f}, {:.1f}) {:.1f}x{:.1f} | "
+                          "node ({:.1f}, {:.1f}) start ({:.1f}, {:.1f}) | player ({:.1f}, {:.1f}) "
+                          "| radius {:.1f} notouch={} block1={} block2={}",
                           mm::kLogTag, object->m_objectID,
                           static_cast<int>(object->m_objectType),
                           rect.origin.x + rect.size.width * 0.5f,
                           rect.origin.y + rect.size.height * 0.5f, rect.size.width,
-                          rect.size.height, object->m_objectRadius,
-                          object->m_isNoTouch ? 1 : 0, object->m_hasNoEffects ? 1 : 0,
+                          rect.size.height, object->getPositionX(), object->getPositionY(),
+                          object->m_startPosition.x, object->m_startPosition.y,
+                          player ? player->getPositionX() : -1.f,
+                          player ? player->getPositionY() : -1.f, object->m_objectRadius,
+                          object->m_isNoTouch ? 1 : 0,
                           object == m_player1CollisionBlock ? 1 : 0,
                           object == m_player2CollisionBlock ? 1 : 0);
             }

@@ -10,6 +10,7 @@
 #include <Geode/utils/file.hpp>
 
 #include <cmath>
+#include <map>
 #include <vector>
 
 using namespace geode::prelude;
@@ -80,7 +81,23 @@ void slopeProbeReset(PlayLayer* layer) {
     if (!state.ramps.empty()) {
         log::info("[macro-maker] {} slopes in this level, ready to record what they do",
                   state.ramps.size());
+        return;
     }
+
+    // No slopes at all is worth saying, and worth saying what the level does have
+    // instead: a level full of ramps that the game does not type as slopes would explain
+    // rather a lot, and it cannot be told from a level that simply has none.
+    std::map<int, int> types;
+    for (auto* object : CCArrayExt<GameObject*>(layer->m_objects)) {
+        if (!object) continue;
+        ++types[static_cast<int>(object->m_objectType)];
+    }
+    std::string summary;
+    for (auto const& [type, count] : types) {
+        if (!summary.empty()) summary += ", ";
+        summary += fmt::format("type {} x{}", type, count);
+    }
+    log::info("[macro-maker] no slopes in this level. What it has: {}", summary);
 }
 
 void slopeProbeStep(PlayLayer* layer) {
