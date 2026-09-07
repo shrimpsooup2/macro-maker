@@ -228,6 +228,52 @@ std::string groundContactReport() {
                        state.leastStanding, state.mostFalling, state.standing, state.falling);
 }
 
+namespace {
+
+struct BandWatch {
+    double above = 0.0;
+    double below = 0.0;
+    int mode = -1;
+    long long steps = 0;
+};
+
+BandWatch& bandWatch() {
+    static BandWatch state;
+    return state;
+}
+
+} // namespace
+
+void watchFlightBand(Level const* level, float playerX, float playerY, int mode) {
+    if (!level) return;
+    if (mode != Ship && mode != Ufo && mode != Wave && mode != Swing) return;
+
+    // The portal that started this stretch of flying is the last one of this mode behind
+    // the run, which is the same thing the simulator anchors its band to.
+    double centre = 1e9;
+    for (auto const& o : level->objects) {
+        if (o.x > playerX) break;
+        if (modeOfPortal(o.kind) == mode) centre = o.y;
+    }
+    if (centre > 1e8) return;
+
+    BandWatch& state = bandWatch();
+    ++state.steps;
+    state.mode = mode;
+    double gap = playerY - centre;
+    if (gap > state.above) state.above = gap;
+    if (gap < state.below) state.below = gap;
+}
+
+std::string flightBandReport() {
+    BandWatch const& state = bandWatch();
+    if (state.steps == 0) return "no flying watched yet";
+    return fmt::format("a {} has been {:.0f} above and {:.0f} below the portal that started it "
+                       "over {} steps; the simulator allows {:.0f} either way",
+                       modeName(state.mode), state.above, -state.below, state.steps,
+                       kBandHeight * 0.5);
+}
+
 std::string CaptureReport::summary() const {
     return fmt::format("{} objects: {} solid, {} deadly, {} orbs and pads, {} portals; "
                        "dropped {} scenery, {} triggers, {} moved by triggers, {} riding "

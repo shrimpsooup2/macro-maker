@@ -69,7 +69,7 @@ struct SearchOptions {
     double seconds = 60.0;      // wall clock ceiling for the whole attempt
     long long budget = 200000000;
     int keep = 600;             // how often a beam is filed away to restart from
-    int mostClicks = 24;        // how far back the learning pass will give clicks up
+    int mostClicks = 96;        // how far back the learning pass will give clicks up
     double repulsion = 500.0;
 };
 

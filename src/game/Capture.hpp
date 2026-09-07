@@ -69,6 +69,15 @@ std::string hazardOverlapReport();
 void watchGroundContact(Level const* level, float playerX, float playerY, bool onGround);
 std::string groundContactReport();
 
+// How far a flying mode is allowed above and below the portal that started it.
+//
+// The simulator holds one inside three hundred units either side of that portal, which
+// came out of scripted calibration runs that never went far enough to test it. Watching
+// real play settles it: the highest and lowest a ship, UFO, wave or swing actually
+// reaches, measured against the portal it came through.
+void watchFlightBand(Level const* level, float playerX, float playerY, int mode);
+std::string flightBandReport();
+
 // The state the game is in right now, written into the level as where a route starts.
 void captureStartState(Level& level, PlayLayer* layer);
 

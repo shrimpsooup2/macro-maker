@@ -595,6 +595,11 @@ void Run::rideSlope(Obj const& o) {
     // The face is only a floor if it is on the side gravity pulls the run towards.
     if ((o.cornerY > 0) != flipped) return;
 
+    // And only when the run is coming down onto it. Rising into the underside of a ramp
+    // is hitting it, not riding it.
+    bool falling = flipped ? (p.vel >= 0.0) : (p.vel <= 0.0);
+    if (!falling && !p.onGround) return;
+
     // Where the sloping face is at this x, and how fast it is climbing. cornerY says
     // which flat side the triangle sits on, cornerX which end the hypotenuse reaches
     // full height at.
@@ -611,7 +616,24 @@ void Run::rideSlope(Obj const& o) {
     double foot = flipped ? boxCentre() + h * 0.5 : boxCentre() - h * 0.5;
     double into = flipped ? (foot - surface) : (surface - foot);
     if (into <= 0.0) return;            // above the face, nothing to stand on yet
-    if (into > o.h + h) return;         // far below it: this is the level's underside
+
+    // How far under the face the run may be and still be put on top of it: the distance
+    // it travelled this step, and a little. Anything deeper than that did not cross the
+    // surface, it is inside the ramp.
+    //
+    // This used to allow a whole box height plus the ramp's own, which meant a run
+    // passing well under a slope was hauled up onto it and handed the speed the face was
+    // climbing at -- a free launch out of nowhere, from a ramp it never touched.
+    double reach = std::abs(p.vel) * kStepDt * positionScale(p.mode, p.mini) + 4.0;
+    if (into > reach) {
+        // Buried in the ramp rather than landing on it. That is running into it, and the
+        // shallow ones are grazes exactly as they are against a block.
+        if (into > o.h * 0.5 && innerHits(o)) {
+            dead = true;
+            death = Death{Cause::Solid, o.id, static_cast<float>(x), static_cast<float>(p.y)};
+        }
+        return;
+    }
 
     p.y = (flipped ? surface - h * 0.5 : surface + h * 0.5) - (boxCentre() - p.y);
     p.vel = rise / (kStepDt * positionScale(p.mode, p.mini));

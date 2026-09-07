@@ -435,10 +435,10 @@ SearchResult solveLearning(Level const& level, SearchOptions options, AvoidMap c
         if (marks.empty() || givenBack > static_cast<int>(changes.size())) break;
 
         if (givenBack > options.mostClicks) {
-            // Past a couple of dozen decisions the retreat is no longer about how this
-            // wall was approached, and each retry costs more while changing less. Start
-            // over on the same wall with a wider beam and everything learned so far.
-            givenBack = 1;
+            // Past this much of the route the retreat is no longer about how this wall
+            // was approached. Start over on it with a wider beam and everything learned
+            // so far, and let the retreat build up again from a couple of clicks.
+            givenBack = 2;
             round.width = std::min(round.width * 2, 3072);
             if (round.width >= 3072) break;
         }
@@ -468,7 +468,12 @@ SearchResult solveLearning(Level const& level, SearchOptions options, AvoidMap c
             givenBack = 1;                  // new ground, and cheap until it argues back
             if (best.solved) return best;
         } else {
-            ++givenBack;                    // same wall: give back more decisions
+            // The same wall again. Giving one more decision back each time crawls: on a
+            // hard section the choice that doomed the run was made a long way before the
+            // place it died, and creeping backwards a click at a time spends the whole
+            // budget arriving there. So the retreat doubles, and reaches far enough back
+            // to matter within a few attempts.
+            givenBack = std::max(givenBack + 1, givenBack * 2);
         }
     }
 
