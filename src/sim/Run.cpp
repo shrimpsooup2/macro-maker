@@ -688,6 +688,18 @@ void Run::collide() {
             p.onGround = true;
             p.dashing = false;
         } else if (!falling && toCeiling <= fromSide) {
+            // Hitting your head is not a bump in this game, it is a death: a run that
+            // rises into the underside of a block dies there, the same as one that runs
+            // into the side of it. This used to stop the run and let it carry on, which
+            // handed the search routes that end with a cube calmly sliding along a
+            // ceiling it should have died against.
+            if (innerHits(o)) {
+                dead = true;
+                death = Death{Cause::Solid, o.id, static_cast<float>(x),
+                              static_cast<float>(p.y)};
+                return;
+            }
+            // A graze, too shallow for the game to care about. Stopped, not killed.
             p.y = (flipped ? (o.top() + h * 0.5) : (o.bottom() - h * 0.5)) - lift;
             p.vel = 0.0;
         } else if (fromSide < toLanding && fromSide < toCeiling && innerHits(o)) {
