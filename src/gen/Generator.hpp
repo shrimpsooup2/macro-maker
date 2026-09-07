@@ -87,6 +87,17 @@ public:
     // planned, the path the real game actually took, and where each of them ended.
     Level const* capturedLevel() const { return m_level.get(); }
     std::vector<std::pair<float, float>> const& plannedPath() const { return m_plannedPath; }
+
+    // Every place along the route where the simulator handed the run velocity, and what
+    // it thinks did it. A jump arc that is not the shape of the others got something the
+    // others did not, and this says what and where.
+    struct Nudge {
+        float x = 0.f;
+        float y = 0.f;
+        Push what = Push::None;
+        int objectId = 0;
+    };
+    std::vector<Nudge> const& nudges() const { return m_nudges; }
     std::vector<std::pair<float, float>> const& realPath() const { return m_realPath; }
     std::pair<float, float> plannedEnd() const { return m_plannedEnd; }
     std::pair<float, float> realEnd() const { return m_realEnd; }
@@ -161,6 +172,7 @@ private:
 
     // The route as the simulator flew it, for drawing over the real level.
     std::vector<std::pair<float, float>> m_plannedPath;
+    std::vector<Nudge> m_nudges;
     std::pair<float, float> m_plannedEnd{0.f, 0.f};
     std::pair<float, float> m_realEnd{0.f, 0.f};
     int m_drawVersion = 0;

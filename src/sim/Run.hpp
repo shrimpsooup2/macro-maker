@@ -29,6 +29,20 @@ inline constexpr double kGravityPortalScale = 0.5;
 // black orb, and dash orbs in ship and UFO -- are handled where they arise.
 inline constexpr double kMiniOrbScale = 0.8;
 
+// What gave the run velocity on a step. A jump arc that is not the same shape as the
+// others got something the others did not, and this is how the picture can say what.
+enum class Push : int {
+    None = 0,
+    Jump,       // the mode's own launch off the ground
+    Orb,
+    Pad,
+    Slope,      // carried up a ramp
+    Portal,     // gravity flipped
+    Teleport,
+};
+
+char const* describe(Push push);
+
 enum class Cause : int {
     None = 0,
     Hazard,
@@ -89,6 +103,10 @@ public:
     bool pressAirborne = false;
 
     Death death;
+
+    // What last pushed this run, and on which step.
+    Push push = Push::None;
+    int pushId = 0;
 
     // Advance one physics step. Returns whether the run is still going.
     bool step(bool button);

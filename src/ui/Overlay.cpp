@@ -118,6 +118,10 @@ bool Overlay::init() {
     if (!m_draw) return false;
     this->addChild(m_draw);
 
+    m_live = CCDrawNode::create();
+    if (!m_live) return false;
+    this->addChild(m_live);
+
     this->scheduleUpdate();
     return true;
 }
@@ -145,9 +149,53 @@ void Overlay::update(float) {
         std::abs(around - m_shownAround) < kRedrawEvery) {
         return;
     }
+    // The player's boxes are redrawn every frame whatever else happens: a box drawn
+    // where the player was two hundred units ago looks exactly like a wrong hitbox.
+    drawLive();
+
+    if (generator.drawVersion() == m_shownVersion &&
+        std::abs(around - m_shownAround) < kRedrawEvery) {
+        return;
+    }
     m_shownVersion = generator.drawVersion();
     m_shownAround = around;
     redraw();
+}
+
+void Overlay::drawLive() {
+    if (!m_live) return;
+    m_live->clear();
+
+    auto* play = PlayLayer::get();
+    if (!play || !play->m_player1) return;
+    auto* player = play->m_player1;
+
+    // The box the game collides with.
+    auto const& rect = player->getObjectRect();
+    drawBox(m_live, rect.getMinX(), rect.getMinY(), rect.getMaxX(), rect.getMaxY(), kGameBox);
+
+    // And the box the simulator believes in, over the top of it.
+    double width = 0.0;
+    double height = 0.0;
+    if (Level const* level = Generator::get().capturedLevel()) {
+        Run probe(*level);
+        probe.p.mode = Engine::get().playerMode();
+        probe.p.mini = Engine::get().playerMini();
+        probe.playerBox(width, height);
+    } else {
+        playerBoxFor(Engine::get().playerMode(), Engine::get().playerMini(), width, height);
+    }
+
+    float x = player->getPositionX();
+    float y = player->getPositionY();
+    float halfW = static_cast<float>(width) * 0.5f;
+    float halfH = static_cast<float>(height) * 0.5f;
+    drawBox(m_live, x - halfW, y - halfH, x + halfW, y + halfH, kPlanned);
+
+    // The smaller box that decides whether running into the side of a solid is fatal.
+    float innerW = static_cast<float>(width * kKillBox) * 0.5f;
+    float innerH = static_cast<float>(height * kKillBox) * 0.5f;
+    drawBox(m_live, x - innerW, y - innerH, x + innerW, y + innerH, kKillBoxColour);
 }
 
 void Overlay::redraw() {
@@ -211,39 +259,20 @@ void Overlay::redraw() {
     drawPath(m_draw, generator.plannedPath(), around, kPlanned);
     drawPath(m_draw, generator.realPath(), around, kReal);
 
-    // The player, three ways: the box the game collides with in white, the box the
-    // simulator believes in over the top of it in yellow, and in orange the smaller one
-    // that decides whether running into the side of a solid is fatal. Hazards are judged
-    // on the yellow box now, not the orange one. If the white and the yellow are not the
-    // same box, that difference is a bug.
-    if (auto* play = PlayLayer::get()) {
-        if (auto* player = play->m_player1) {
-            auto const& rect = player->getObjectRect();
-            drawBox(m_draw, rect.getMinX(), rect.getMinY(), rect.getMaxX(), rect.getMaxY(),
-                    kGameBox);
-
-            double width = 0.0;
-            double height = 0.0;
-            if (Level const* level = generator.capturedLevel()) {
-                Run probe(*level);
-                probe.p.mode = Engine::get().playerMode();
-                probe.p.mini = Engine::get().playerMini();
-                probe.playerBox(width, height);
-            } else {
-                playerBoxFor(Engine::get().playerMode(), Engine::get().playerMini(), width,
-                             height);
-            }
-
-            float x = player->getPositionX();
-            float y = player->getPositionY();
-            drawBox(m_draw, x - static_cast<float>(width) * 0.5f,
-                    y - static_cast<float>(height) * 0.5f, x + static_cast<float>(width) * 0.5f,
-                    y + static_cast<float>(height) * 0.5f, kPlanned);
-
-            float innerW = static_cast<float>(width * kKillBox) * 0.5f;
-            float innerH = static_cast<float>(height * kKillBox) * 0.5f;
-            drawBox(m_draw, x - innerW, y - innerH, x + innerW, y + innerH, kKillBoxColour);
+    // Every place the route was given velocity, and by what. An arc that is not the
+    // shape of its neighbours was pushed by something, and this is the something.
+    for (auto const& nudge : generator.nudges()) {
+        if (nudge.x < around - kReach || nudge.x > around + kReach) continue;
+        ccColor4F colour = kPlanned;
+        switch (nudge.what) {
+            case Push::Orb: colour = kSpecial; break;
+            case Push::Pad: colour = kSlope; break;
+            case Push::Slope: colour = kReal; break;
+            case Push::Portal:
+            case Push::Teleport: colour = kHazard; break;
+            default: break;
         }
+        m_draw->drawDot(ccp(nudge.x, nudge.y), 3.5f, colour);
     }
 
     // Where each side thinks it went wrong.

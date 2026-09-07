@@ -85,6 +85,18 @@ bool isFlyingMode(int mode) {
 
 } // namespace
 
+char const* describe(Push push) {
+    switch (push) {
+        case Push::Jump: return "a jump";
+        case Push::Orb: return "an orb";
+        case Push::Pad: return "a pad";
+        case Push::Slope: return "a slope";
+        case Push::Portal: return "a gravity portal";
+        case Push::Teleport: return "a teleport";
+        default: return "nothing";
+    }
+}
+
 std::string describe(Death const& death) {
     switch (death.cause) {
         case Cause::Hazard:
@@ -273,6 +285,9 @@ bool Run::innerHits(Obj const& o) const {
 bool Run::step(bool button) {
     if (dead || finished || !level) return false;
 
+    push = Push::None;
+    pushId = 0;
+
     bool justPressed = button && !prevButton;
     if (!button) pressSpent = false;
     if (justPressed) pressAirborne = !p.onGround;
@@ -288,14 +303,19 @@ bool Run::step(bool button) {
     // handled in the physics step.
     if (button && (p.mode == Cube || p.mode == Robot) && p.onGround) {
         launch(p);
+        push = Push::Jump;
     } else if (justPressed && p.mode == Spider) {
         spiderTeleport();
+        push = Push::Teleport;
     } else if (justPressed && p.mode == Ball && p.onGround) {
         launch(p);
+        push = Push::Jump;
     } else if (justPressed && p.mode == Swing) {
         launch(p);
+        push = Push::Jump;
     } else if (justPressed && p.mode == Ufo) {
         launch(p);
+        push = Push::Jump;
     }
 
     // The velocity the step started with, kept because a gravity portal halves what the
@@ -358,6 +378,8 @@ void Run::touchObjects(bool button, bool justPressed) {
                 markSpent(o);
                 p.y = o.y + o.extra;
                 p.onGround = false;
+                push = Push::Teleport;
+                pushId = o.id;
             }
         } else if (isPortalMode(k)) {
             p.mode = modeOfPortal(k);
@@ -379,7 +401,11 @@ void Run::touchObjects(bool button, bool justPressed) {
             if (!isSpent(o)) {
                 markSpent(o);
                 bool wantsUpsideDown = (k == KGravPortalDown);
-                if (p.upsideDown != wantsUpsideDown) applyGravityPortal();
+                if (p.upsideDown != wantsUpsideDown) {
+                    applyGravityPortal();
+                    push = Push::Portal;
+                    pushId = o.id;
+                }
                 p.upsideDown = wantsUpsideDown;
             }
         } else if (k == KModifier) {
@@ -389,6 +415,8 @@ void Run::touchObjects(bool button, bool justPressed) {
             if (!isSpent(o)) {
                 markSpent(o);
                 applyPad(o);
+                push = Push::Pad;
+                pushId = o.id;
             }
         } else if (isOrb(o.kind)) {
             // One orb per press, and the press has to be one an orb will take: made on
@@ -400,6 +428,8 @@ void Run::touchObjects(bool button, bool justPressed) {
                 pressSpent = true;
                 if (!o.multi) markSpent(o);
                 applyOrb(o);
+                push = Push::Orb;
+                pushId = o.id;
             }
         }
     }
@@ -558,6 +588,8 @@ void Run::rideSlope(Obj const& o) {
 
     p.y = flipped ? surface - h * 0.5 : surface + h * 0.5;
     p.vel = rise / (kStepDt * positionScale(p.mode, p.mini));
+    push = Push::Slope;
+    pushId = o.id;
     double cap = clampFor(p.mode, p.mini);
     p.vel = std::clamp(p.vel, -cap, cap);
     p.onGround = true;

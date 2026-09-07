@@ -439,6 +439,7 @@ void Generator::captureNow() {
     captureStartState(*m_level, m_layer);
 
     m_plannedPath.clear();
+    m_nudges.clear();
     m_realPath.clear();
     m_plannedEnd = {0.f, 0.f};
     m_realEnd = {0.f, 0.f};
@@ -552,12 +553,18 @@ void Generator::collectSearch() {
     // Fly the route once more to keep the shape of it. The search works in states and
     // throws the path away; the picture needs the path.
     m_plannedPath.clear();
+    m_nudges.clear();
     if (m_level) {
         Run flight(*m_level);
         for (char want : m_inputs) {
             flight.step(want != 0);
             m_plannedPath.emplace_back(static_cast<float>(flight.x),
                                        static_cast<float>(flight.p.y));
+            if (flight.push != Push::None) {
+                m_nudges.push_back(Nudge{static_cast<float>(flight.x),
+                                         static_cast<float>(flight.p.y), flight.push,
+                                         flight.pushId});
+            }
             if (flight.dead || flight.finished) break;
         }
         m_plannedEnd = m_plannedPath.empty()
@@ -565,6 +572,16 @@ void Generator::collectSearch() {
                            : m_plannedPath.back();
     }
     ++m_drawVersion;
+
+    if (settings().debugLog && !m_nudges.empty()) {
+        int shown = 0;
+        for (auto const& nudge : m_nudges) {
+            if (nudge.what == Push::Jump) continue;      // every arc starts with one
+            log::info("{}   the route is pushed by {} (id {}) at x={:.0f} y={:.0f}", kLogTag,
+                      describe(nudge.what), nudge.objectId, nudge.x, nudge.y);
+            if (++shown >= 20) break;
+        }
+    }
 
     if (settings().verify == VerifyMode::Off) {
         writeOut(m_result.solved);

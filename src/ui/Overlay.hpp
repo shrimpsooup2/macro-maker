@@ -31,8 +31,12 @@ public:
 
 private:
     void redraw();
+    void drawLive();
 
+    // Two of them: the level and the route only change when the job does, and the
+    // player's own boxes have to keep up with the player or they are worse than useless.
     cocos2d::CCDrawNode* m_draw = nullptr;
+    cocos2d::CCDrawNode* m_live = nullptr;
     int m_shownVersion = -1;
     float m_shownAround = -1e9f;
 };
