@@ -214,12 +214,20 @@ void Run::playerBox(double& width, double& height) const {
     playerBoxFor(p.mode, p.mini, width, height);
 }
 
+double Run::boxCentre() const {
+    if (level && level->measuredMode == p.mode && level->measuredMini == p.mini) {
+        return p.y + level->measuredOffsetY;
+    }
+    return p.y;
+}
+
 bool Run::overlaps(Obj const& o) const {
     double w = 0.0;
     double h = 0.0;
     playerBox(w, h);
-    return (x - w * 0.5 < o.right() && x + w * 0.5 > o.left() && p.y - h * 0.5 < o.top() &&
-            p.y + h * 0.5 > o.bottom());
+    double centre = boxCentre();
+    return (x - w * 0.5 < o.right() && x + w * 0.5 > o.left() && centre - h * 0.5 < o.top() &&
+            centre + h * 0.5 > o.bottom());
 }
 
 bool Run::touches(Obj const& o) const {
@@ -235,10 +243,11 @@ bool Run::touchesHazard(Obj const& o) const {
     double w = 0.0;
     double h = 0.0;
     playerBox(w, h);
+    double centre = boxCentre();
     double l = x - w * 0.5;
     double r = x + w * 0.5;
-    double b = p.y - h * 0.5;
-    double t = p.y + h * 0.5;
+    double b = centre - h * 0.5;
+    double t = centre + h * 0.5;
 
     if (o.round && o.radius > 0.f) {
         // A blade is a circle, and the nearest point of the player to its middle is what
@@ -263,8 +272,9 @@ bool Run::reaches(Obj const& o) const {
     double w = 0.0;
     double h = 0.0;
     playerBox(w, h);
-    return (x - w * 0.5 < o.right() && x + w * 0.5 > o.left() && p.y - h * 0.5 < o.top() &&
-            p.y + h * 0.5 > o.bottom());
+    double centre = boxCentre();
+    return (x - w * 0.5 < o.right() && x + w * 0.5 > o.left() && centre - h * 0.5 < o.top() &&
+            centre + h * 0.5 > o.bottom());
 }
 
 bool Run::innerHits(Obj const& o) const {
@@ -276,10 +286,11 @@ bool Run::innerHits(Obj const& o) const {
     playerBox(w, h);
     w *= kKillBox;
     h *= kKillBox;
+    double centre = boxCentre();
     double l = x - w * 0.5;
     double r = x + w * 0.5;
-    double b = p.y - h * 0.5;
-    double t = p.y + h * 0.5;
+    double b = centre - h * 0.5;
+    double t = centre + h * 0.5;
 
     if (!(l < o.right() && r > o.left() && b < o.top() && t > o.bottom())) return false;
 
@@ -560,7 +571,7 @@ bool Run::spiderTeleport() {
         best = kGroundTop;              // the level floor is always there below
     }
 
-    p.y = goingUp ? best - h * 0.5 : best + h * 0.5;
+    p.y = (goingUp ? best - h * 0.5 : best + h * 0.5) - (boxCentre() - p.y);
     p.upsideDown = !p.upsideDown;
     p.vel = 0.0;
     p.onGround = true;
@@ -597,12 +608,12 @@ void Run::rideSlope(Obj const& o) {
     if (o.cornerX < 0) rise = -rise;
     if (o.cornerY > 0) rise = -rise;
 
-    double foot = flipped ? p.y + h * 0.5 : p.y - h * 0.5;
+    double foot = flipped ? boxCentre() + h * 0.5 : boxCentre() - h * 0.5;
     double into = flipped ? (foot - surface) : (surface - foot);
     if (into <= 0.0) return;            // above the face, nothing to stand on yet
     if (into > o.h + h) return;         // far below it: this is the level's underside
 
-    p.y = flipped ? surface - h * 0.5 : surface + h * 0.5;
+    p.y = (flipped ? surface - h * 0.5 : surface + h * 0.5) - (boxCentre() - p.y);
     p.vel = rise / (kStepDt * positionScale(p.mode, p.mini));
     push = Push::Slope;
     pushId = o.id;
@@ -616,12 +627,13 @@ void Run::collide() {
     double w = 0.0;
     double h = 0.0;
     playerBox(w, h);
+    double lift = boxCentre() - p.y;        // the box's middle against the reported one
 
     // The level's own floor. It stops the run from both sides: only gravity pulling
     // downwards makes it something to stand on, but nothing gets to be underneath it
     // either way.
-    if (p.y - h * 0.5 <= kGroundTop) {
-        p.y = kGroundTop + h * 0.5;
+    if (boxCentre() - h * 0.5 <= kGroundTop) {
+        p.y = kGroundTop + h * 0.5 - lift;
         // Only a run moving into the floor is stopped by it. Zeroing the velocity
         // whatever it was cancelled anything fired from a standing start: a pad at
         // ground level set 16.0 and the same step set it straight back to nothing.
@@ -646,10 +658,11 @@ void Run::collide() {
         if (!overlaps(o)) continue;
 
         playerBox(w, h);
+        lift = boxCentre() - p.y;
         double l = x - w * 0.5;
         double r = x + w * 0.5;
-        double b = p.y - h * 0.5;
-        double t = p.y + h * 0.5;
+        double b = boxCentre() - h * 0.5;
+        double t = boxCentre() + h * 0.5;
 
         // Everything here is in the run's own frame: down is wherever gravity pulls.
         // Upside down, landing means meeting a surface from underneath, and resolving to
@@ -662,12 +675,12 @@ void Run::collide() {
         double fromSide = std::min<double>(r - o.left(), o.right() - l);
 
         if (falling && toLanding <= fromSide && toLanding <= toCeiling) {
-            p.y = flipped ? (o.bottom() - h * 0.5) : (o.top() + h * 0.5);
+            p.y = (flipped ? (o.bottom() - h * 0.5) : (o.top() + h * 0.5)) - lift;
             p.vel = 0.0;
             p.onGround = true;
             p.dashing = false;
         } else if (!falling && toCeiling <= fromSide) {
-            p.y = flipped ? (o.top() + h * 0.5) : (o.bottom() - h * 0.5);
+            p.y = (flipped ? (o.top() + h * 0.5) : (o.bottom() - h * 0.5)) - lift;
             p.vel = 0.0;
         } else if (fromSide < toLanding && fromSide < toCeiling && innerHits(o)) {
             // Only a genuine side-on hit is fatal, meaning the horizontal overlap is the

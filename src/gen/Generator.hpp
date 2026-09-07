@@ -107,6 +107,7 @@ private:
     Generator() = default;
 
     void askForReset(Phase after);
+    void watchStep();
     void captureNow();
     void launchSearch();
     void collectSearch();

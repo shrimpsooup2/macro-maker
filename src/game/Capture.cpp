@@ -97,6 +97,83 @@ std::size_t knownKillerCount() {
     return killers().size();
 }
 
+namespace {
+
+struct OverlapWatch {
+    double survived = 0.0;      // the deepest the run has been in a hazard and lived
+    double killed = 1e9;        // the shallowest it has been in one and died
+    int survivedId = 0;
+    int killedId = 0;
+    long long steps = 0;
+};
+
+OverlapWatch& watch() {
+    static OverlapWatch state;
+    return state;
+}
+
+// How far into a hazard the player is, as a fraction of its own box: zero for touching
+// the edge, one for the middle of the player being inside it.
+double overlapFraction(Obj const& o, double px, double py, double w, double h) {
+    double overlapX = std::min(px + w * 0.5, static_cast<double>(o.right())) -
+                      std::max(px - w * 0.5, static_cast<double>(o.left()));
+    double overlapY = std::min(py + h * 0.5, static_cast<double>(o.top())) -
+                      std::max(py - h * 0.5, static_cast<double>(o.bottom()));
+    if (overlapX <= 0.0 || overlapY <= 0.0) return 0.0;
+    return std::min(overlapX / w, overlapY / h);
+}
+
+} // namespace
+
+void watchHazardOverlap(Level const* level, float playerX, float playerY, bool died) {
+    if (!level) return;
+
+    double w = 0.0;
+    double h = 0.0;
+    playerBoxFor(level->measuredMode >= 0 ? level->measuredMode : 0, level->measuredMini, w, h);
+    if (level->measuredWidth > 0.0) {
+        w = level->measuredWidth;
+        h = level->measuredHeight;
+    }
+
+    double deepest = 0.0;
+    int deepestId = 0;
+    for (int index : level->nearby(playerX, 60.0)) {
+        Obj const& o = level->objects[static_cast<std::size_t>(index)];
+        if (!isDeadly(o.kind)) continue;
+        double fraction = overlapFraction(o, playerX, playerY, w, h);
+        if (fraction > deepest) {
+            deepest = fraction;
+            deepestId = o.id;
+        }
+    }
+
+    OverlapWatch& state = watch();
+    ++state.steps;
+    if (died) {
+        if (deepest > 0.0 && deepest < state.killed) {
+            state.killed = deepest;
+            state.killedId = deepestId;
+        }
+    } else if (deepest > state.survived) {
+        state.survived = deepest;
+        state.survivedId = deepestId;
+    }
+}
+
+std::string hazardOverlapReport() {
+    OverlapWatch const& state = watch();
+    if (state.steps == 0) return "nothing watched yet";
+    if (state.killed > 1.0) {
+        return fmt::format("survived {:.0f}% into a hazard (id {}) and has not died in one yet",
+                           state.survived * 100.0, state.survivedId);
+    }
+    return fmt::format("survived {:.0f}% into a hazard (id {}), died at {:.0f}% (id {}): the "
+                       "fatal depth is between those",
+                       state.survived * 100.0, state.survivedId, state.killed * 100.0,
+                       state.killedId);
+}
+
 std::string CaptureReport::summary() const {
     return fmt::format("{} objects: {} solid, {} deadly, {} orbs and pads, {} portals; "
                        "dropped {} scenery, {} triggers, {} moved by triggers, {} riding "
@@ -312,6 +389,8 @@ void captureStartState(Level& level, PlayLayer* layer) {
             level.measuredHeight = rect.size.height;
             level.measuredMode = level.start.mode;
             level.measuredMini = level.start.mini;
+            level.measuredOffsetY =
+                rect.origin.y + rect.size.height * 0.5f - player->getPositionY();
 
             double guessWidth = 0.0;
             double guessHeight = 0.0;

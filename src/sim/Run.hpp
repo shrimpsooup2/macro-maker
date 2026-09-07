@@ -132,6 +132,9 @@ public:
 
     // The search asks these of a run it is deciding what to do with.
     void playerBox(double& width, double& height) const;
+
+    // The middle of the player's box, which is not always the position the game reports.
+    double boxCentre() const;
     bool overlaps(Obj const& o) const;
     bool isSpent(Obj const& o) const;
 

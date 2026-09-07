@@ -48,6 +48,16 @@ void rememberKiller(int objectId);
 bool isKnownKiller(int objectId);
 std::size_t knownKillerCount();
 
+// How much of the player has to be inside a hazard before the game kills it.
+//
+// This is the last number in the simulator that is still a guess, and it is the one that
+// decides whether a route clips the corner of a spike or dies on it. It cannot be read
+// off the game directly, but it can be watched: every step the run overlaps a hazard and
+// lives puts a floor under it, and the overlap at the moment of a death puts a ceiling on
+// it. Play the level and the two numbers close in on the answer.
+void watchHazardOverlap(Level const* level, float playerX, float playerY, bool died);
+std::string hazardOverlapReport();
+
 // The state the game is in right now, written into the level as where a route starts.
 void captureStartState(Level& level, PlayLayer* layer);
 

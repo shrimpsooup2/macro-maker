@@ -249,6 +249,10 @@ void Generator::noteGameDeath(float x, float y, int objectId) {
     // Worth learning from whether or not a job is running: the person playing the level
     // finds hazards the simulator has never been shown.
     rememberKiller(objectId);
+    if (m_level) {
+        watchHazardOverlap(m_level.get(), x, y, true);
+        log::info("{} how deep a hazard has to be to kill: {}", kLogTag, hazardOverlapReport());
+    }
     if (!busy()) return;
 
     log::info("{} the game killed the run at x={:.0f} y={:.0f} on object id {} (step {} of the "
@@ -370,7 +374,17 @@ void Generator::frozenFrame() {
     Engine::get().unfreeze();
 }
 
+void Generator::watchStep() {
+    // Every step of a run somebody is actually playing, or of a route being checked, says
+    // something about how deep into a hazard this game lets you get.
+    if (m_phase != Phase::Replaying && m_phase != Phase::Recording) return;
+    if (!m_level) return;
+    Engine& engine = Engine::get();
+    watchHazardOverlap(m_level.get(), engine.playerX(), engine.playerY(), false);
+}
+
 void Generator::beforePhysicsStep() {
+    watchStep();
     if (m_phase != Phase::Replaying || m_runOver) return;
 
     Engine& engine = Engine::get();

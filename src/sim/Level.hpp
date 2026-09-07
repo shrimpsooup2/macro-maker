@@ -135,6 +135,11 @@ public:
     // be, since the game is right there to ask.
     double measuredWidth = 0.0;
     double measuredHeight = 0.0;
+
+    // Where the middle of that box sits relative to the position the game reports for
+    // the player. If these are not the same point, resting on a block puts the run at
+    // the wrong height, and every jump taken from it is displaced by the difference.
+    double measuredOffsetY = 0.0;
     int measuredMode = -1;
     bool measuredMini = false;
 
