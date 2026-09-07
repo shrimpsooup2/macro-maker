@@ -79,10 +79,14 @@ public:
 
     bool prevButton = false;
 
-    // A press fires one orb and then has to be let go of before it fires another. It
-    // can be made early -- holding from before an orb still catches it, which is the
-    // buffer -- but it is spent once something takes it.
+    // A press fires one orb and then has to be let go of before it fires another.
+    //
+    // It can be made early and still catch the orb -- that is the buffer -- but only if
+    // it was made in the air. Holding the button through an orb does not fire it, which
+    // is why you cannot hold a jump into one and expect it to go off, and modelling it
+    // the other way round hands the search routes that no person could play.
     bool pressSpent = false;
+    bool pressAirborne = false;
 
     Death death;
 
@@ -131,6 +135,7 @@ private:
     void applyBand();
 
     bool touches(Obj const& o) const;
+    bool touchesHazard(Obj const& o) const;
     bool innerHits(Obj const& o) const;
 
     double m_velBeforeStep = 0.0;

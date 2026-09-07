@@ -207,6 +207,28 @@ bool Run::touches(Obj const& o) const {
             p.y + half > o.bottom());
 }
 
+bool Run::touchesHazard(Obj const& o) const {
+    double w = 0.0;
+    double h = 0.0;
+    playerBox(w, h);
+    double l = x - w * 0.5;
+    double r = x + w * 0.5;
+    double b = p.y - h * 0.5;
+    double t = p.y + h * 0.5;
+
+    if (o.round && o.radius > 0.f) {
+        // A blade is a circle, and the nearest point of the player to its middle is what
+        // decides whether the run is in it.
+        double nearX = std::min(std::max<double>(o.x, l), r);
+        double nearY = std::min(std::max<double>(o.y, b), t);
+        double dx = nearX - o.x;
+        double dy = nearY - o.y;
+        return dx * dx + dy * dy <= static_cast<double>(o.radius) * o.radius;
+    }
+
+    return l < o.right() && r > o.left() && b < o.top() && t > o.bottom();
+}
+
 bool Run::innerHits(Obj const& o) const {
     // The smaller box the game uses to decide a collision is fatal rather than merely a
     // bump. Size is inferred, not measured. Without it, brushing a decorative sliver is
@@ -241,6 +263,7 @@ bool Run::step(bool button) {
 
     bool justPressed = button && !prevButton;
     if (!button) pressSpent = false;
+    if (justPressed) pressAirborne = !p.onGround;
     prevButton = button;
     ++frame;
 
@@ -290,14 +313,20 @@ bool Run::step(bool button) {
     return !dead;
 }
 
-void Run::touchObjects(bool button, bool /*justPressed*/) {
+void Run::touchObjects(bool button, bool justPressed) {
     auto const& nearby = level->nearby(x);
 
     for (int index : nearby) {
         Obj const& o = level->objects[static_cast<std::size_t>(index)];
 
         if (isDeadly(o.kind)) {
-            if (overlaps(o) && innerHits(o)) {
+            // No inner box for a hazard. That shrunken box came from a time when every
+            // hitbox in here was a guess and a decorative sliver could kill you; the
+            // boxes are the game's own now, and a spike is already 6 by 12 rather than
+            // the 30 square it is drawn in. Asking for a third of the player to be
+            // inside one on top of that is how a hazard laid flat into the ground gets
+            // walked straight over.
+            if (touchesHazard(o)) {
                 dead = true;
                 death = Death{Cause::Hazard, o.id, static_cast<float>(x),
                               static_cast<float>(p.y)};
@@ -350,12 +379,12 @@ void Run::touchObjects(bool button, bool /*justPressed*/) {
                 applyPad(o);
             }
         } else if (isOrb(o.kind)) {
-            // One orb per press. The press may be made early -- 18% of recorded orb
-            // activations happen with the button already down, which is the buffer --
-            // but it is spent on the first orb it reaches, and the next one needs
-            // another click. A multi-activate orb is never spent: it can be clicked
-            // again while you are still on it, which is what the box is for.
-            if (button && !pressSpent && (o.multi || !isSpent(o))) {
+            // One orb per press, and the press has to be one an orb will take: made on
+            // this step, or made earlier in the air and still held. A button held from
+            // the ground -- a jump, in other words -- goes through an orb without
+            // firing it, and a simulator that lets it fire plans routes nobody can play.
+            if (button && (justPressed || pressAirborne) && !pressSpent &&
+                (o.multi || !isSpent(o))) {
                 pressSpent = true;
                 if (!o.multi) markSpent(o);
                 applyOrb(o);

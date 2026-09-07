@@ -186,9 +186,10 @@ void Overlay::redraw() {
     drawPath(m_draw, generator.realPath(), around, kReal);
 
     // The player, three ways: the box the game collides with in white, the box the
-    // simulator believes in over the top of it in yellow, and the smaller one it decides
-    // a hazard is fatal inside in orange. If the white and the yellow are not the same
-    // box, that difference is the bug.
+    // simulator believes in over the top of it in yellow, and in orange the smaller one
+    // that decides whether running into the side of a solid is fatal. Hazards are judged
+    // on the yellow box now, not the orange one. If the white and the yellow are not the
+    // same box, that difference is a bug.
     if (auto* play = PlayLayer::get()) {
         if (auto* player = play->m_player1) {
             auto const& rect = player->getObjectRect();
