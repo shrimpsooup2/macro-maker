@@ -50,6 +50,12 @@ struct Death {
 
 std::string describe(Death const& death);
 
+// The player's own box, per mode and size. INFERRED where it has to be -- 30 square at
+// full size, 0.6 of that when mini, and the wave much smaller -- but a level captured
+// from the running game carries the real one for the mode it was captured in, and that
+// wins wherever it applies.
+void playerBoxFor(int mode, bool mini, double& width, double& height);
+
 // The list of objects a run has used up. Shared between clones until one of them spends
 // something, which keeps branching cheap: a beam clones a run per step and consumes
 // something perhaps once in a hundred.

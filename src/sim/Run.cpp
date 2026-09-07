@@ -170,13 +170,24 @@ double Run::progress() const {
     return std::clamp(x / level->length, 0.0, 1.0);
 }
 
-void Run::playerBox(double& width, double& height) const {
-    // INFERRED, not measured: 30 square at full size, 0.6 of that when mini (the size
-    // the recordings report), and the wave is famously much smaller.
-    double scale = p.mini ? 0.6 : 1.0;
-    double side = (p.mode == Wave) ? 10.0 : 30.0;
+void playerBoxFor(int mode, bool mini, double& width, double& height) {
+    // INFERRED: 30 square at full size, 0.6 of that when mini (the size the recordings
+    // report), and the wave is famously much smaller.
+    double scale = mini ? 0.6 : 1.0;
+    double side = (mode == Wave) ? 10.0 : 30.0;
     width = side * scale;
     height = side * scale;
+}
+
+void Run::playerBox(double& width, double& height) const {
+    // The game's own box for the mode this level was captured in beats the guess.
+    if (level && level->measuredMode == p.mode && level->measuredMini == p.mini &&
+        level->measuredWidth > 0.0) {
+        width = level->measuredWidth;
+        height = level->measuredHeight;
+        return;
+    }
+    playerBoxFor(p.mode, p.mini, width, height);
 }
 
 bool Run::overlaps(Obj const& o) const {

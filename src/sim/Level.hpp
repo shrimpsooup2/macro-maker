@@ -124,6 +124,14 @@ public:
     Player start;                   // the state the game itself starts the run in
     double startX = 0.0;
 
+    // The player's box as the game itself reports it, for the mode the capture was taken
+    // in. The one thing in this simulator that used to be a guess and no longer has to
+    // be, since the game is right there to ask.
+    double measuredWidth = 0.0;
+    double measuredHeight = 0.0;
+    int measuredMode = -1;
+    bool measuredMini = false;
+
     std::string levelName;
     int levelId = 0;
 

@@ -264,6 +264,26 @@ void captureStartState(Level& level, PlayLayer* layer) {
     level.start.speed = engine.playerSpeed();
     level.start.onGround = engine.playerOnGround();
     level.start.dashing = false;
+
+    if (auto* player = layer->m_player1) {
+        auto const& rect = player->getObjectRect();
+        if (rect.size.width > 0.f && rect.size.height > 0.f) {
+            level.measuredWidth = rect.size.width;
+            level.measuredHeight = rect.size.height;
+            level.measuredMode = level.start.mode;
+            level.measuredMini = level.start.mini;
+
+            double guessWidth = 0.0;
+            double guessHeight = 0.0;
+            playerBoxFor(level.start.mode, level.start.mini, guessWidth, guessHeight);
+            log::info("[macro-maker] the player's own box is {:.2f} by {:.2f} ({} {}), against "
+                      "the {:.2f} by {:.2f} this was assuming; its middle sits {:.2f} from its "
+                      "position",
+                      rect.size.width, rect.size.height, modeName(level.start.mode),
+                      level.start.mini ? "mini" : "full size", guessWidth, guessHeight,
+                      rect.origin.y + rect.size.height * 0.5f - player->getPositionY());
+        }
+    }
 }
 
 } // namespace mm

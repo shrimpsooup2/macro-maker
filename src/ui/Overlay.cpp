@@ -3,6 +3,7 @@
 #include "game/Engine.hpp"
 #include "gen/Generator.hpp"
 #include "settings/Settings.hpp"
+#include "sim/Run.hpp"
 
 #include <Geode/Bindings.hpp>
 #include <Geode/Geode.hpp>
@@ -34,6 +35,8 @@ constexpr ccColor4F kNothing{0.f, 0.f, 0.f, 0.f};
 constexpr ccColor4F kPlanned{1.0f, 0.9f, 0.2f, 0.95f};
 constexpr ccColor4F kReal{0.4f, 0.9f, 1.0f, 0.95f};
 constexpr ccColor4F kGround{1.0f, 1.0f, 1.0f, 0.35f};
+constexpr ccColor4F kGameBox{1.0f, 1.0f, 1.0f, 0.95f};
+constexpr ccColor4F kKillBoxColour{1.0f, 0.55f, 0.2f, 0.95f};
 
 ccColor4F colourFor(int kind) {
     if (isDeadly(kind)) return kHazard;
@@ -138,6 +141,40 @@ void Overlay::redraw() {
 
     drawPath(m_draw, generator.plannedPath(), around, kPlanned);
     drawPath(m_draw, generator.realPath(), around, kReal);
+
+    // The player, three ways: the box the game collides with in white, the box the
+    // simulator believes in over the top of it in yellow, and the smaller one it decides
+    // a hazard is fatal inside in orange. If the white and the yellow are not the same
+    // box, that difference is the bug.
+    if (auto* play = PlayLayer::get()) {
+        if (auto* player = play->m_player1) {
+            auto const& rect = player->getObjectRect();
+            drawBox(m_draw, rect.getMinX(), rect.getMinY(), rect.getMaxX(), rect.getMaxY(),
+                    kGameBox);
+
+            double width = 0.0;
+            double height = 0.0;
+            if (Level const* level = generator.capturedLevel()) {
+                Run probe(*level);
+                probe.p.mode = Engine::get().playerMode();
+                probe.p.mini = Engine::get().playerMini();
+                probe.playerBox(width, height);
+            } else {
+                playerBoxFor(Engine::get().playerMode(), Engine::get().playerMini(), width,
+                             height);
+            }
+
+            float x = player->getPositionX();
+            float y = player->getPositionY();
+            drawBox(m_draw, x - static_cast<float>(width) * 0.5f,
+                    y - static_cast<float>(height) * 0.5f, x + static_cast<float>(width) * 0.5f,
+                    y + static_cast<float>(height) * 0.5f, kPlanned);
+
+            float innerW = static_cast<float>(width * kKillBox) * 0.5f;
+            float innerH = static_cast<float>(height * kKillBox) * 0.5f;
+            drawBox(m_draw, x - innerW, y - innerH, x + innerW, y + innerH, kKillBoxColour);
+        }
+    }
 
     // Where each side thinks it went wrong.
     auto planned = generator.plannedEnd();
