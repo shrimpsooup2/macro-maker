@@ -19,6 +19,7 @@ struct CaptureReport {
     int droppedMoving = 0;
     int droppedTriggers = 0;
     int droppedScenery = 0;
+    int droppedRiding = 0;
     bool hasDual = false;
 
     std::string summary() const;

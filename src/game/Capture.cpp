@@ -70,9 +70,10 @@ bool looksRound(GameObject* object, float w, float h) {
 
 std::string CaptureReport::summary() const {
     return fmt::format("{} objects: {} solid, {} deadly, {} orbs and pads, {} portals; "
-                       "dropped {} scenery, {} triggers, {} moved by triggers",
+                       "dropped {} scenery, {} triggers, {} moved by triggers, {} riding "
+                       "along with the player",
                        objectsSeen, solids, hazards, orbs, portals, droppedScenery,
-                       droppedTriggers, droppedMoving);
+                       droppedTriggers, droppedMoving, droppedRiding);
 }
 
 std::unique_ptr<Level> captureLevel(PlayLayer* layer, CaptureReport& report) {
@@ -93,9 +94,30 @@ std::unique_ptr<Level> captureLevel(PlayLayer* layer, CaptureReport& report) {
         if (effect->m_targetGroupID > 0) shifted.insert(effect->m_targetGroupID);
     }
 
+    // Where the player is standing, so that anything the run is already inside can be
+    // told apart from anything it has to avoid.
+    float playerX = 0.f;
+    float playerY = 0.f;
+    float playerHalf = 15.f;
+    if (auto* player = layer->m_player1) {
+        playerX = player->getPositionX();
+        playerY = player->getPositionY();
+        playerHalf = 15.f * std::max(0.3f, player->m_vehicleSize);
+    }
+
     for (auto* object : CCArrayExt<GameObject*>(layer->m_objects)) {
         if (!object) continue;
         ++report.objectsSeen;
+
+        // The game keeps a block glued to each player for its collision-block triggers,
+        // and it is in the object list like anything else. At the start of a run it sits
+        // exactly where the player is, a step behind, and reads as a spike standing on
+        // the run's head: every route died on its first step because of it.
+        if (object == layer->m_player1CollisionBlock ||
+            object == layer->m_player2CollisionBlock) {
+            ++report.droppedRiding;
+            continue;
+        }
 
         int id = object->m_objectID;
         if (id <= 0) continue;
@@ -171,6 +193,20 @@ std::unique_ptr<Level> captureLevel(PlayLayer* layer, CaptureReport& report) {
             if (auto* portal = typeinfo_cast<TeleportPortalObject*>(object)) {
                 entry.extra = portal->m_teleportYOffset;
             }
+        }
+
+        // Anything deadly that the player is standing in right now is not deadly: the
+        // run is alive in this exact spot, which the game has just demonstrated. Only
+        // something riding along with the player can be in that position, and it would
+        // otherwise kill every route on its first step.
+        if (isDeadly(kind) && entry.left() < playerX + playerHalf &&
+            entry.right() > playerX - playerHalf && entry.bottom() < playerY + playerHalf &&
+            entry.top() > playerY - playerHalf) {
+            log::warn("[macro-maker] id {} is deadly and sits on the player at x={:.1f} y={:.1f}, "
+                      "so it is being ignored",
+                      id, entry.x, entry.y);
+            ++report.droppedRiding;
+            continue;
         }
 
         if (isBlocking(kind)) ++report.solids;
