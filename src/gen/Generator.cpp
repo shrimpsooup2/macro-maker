@@ -18,12 +18,11 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
-// The step of the run a route is anchored to. The game opens a level with a delay and a
-// settle timer of its own, and it runs four steps for every frame it draws, so the
-// anchor sits far enough in that none of that can move it -- a tenth of a second, about
-// one block: past anything the level does to get started, short of anything that can
-// kill you.
-constexpr int kAnchorSteps = 24;
+// The step of the run a route is anchored to. It only has to be past the frame or two
+// the game takes to get a level going, and every step spent getting there is a step the
+// route cannot act on -- so it is as early as that allows rather than comfortably late.
+// A capture that arrives later than this takes whatever step it lands on instead.
+constexpr int kAnchorSteps = 8;
 
 // How long to wait for a level to get going before deciding it never will.
 constexpr int kStartFrames = 300;
@@ -256,6 +255,33 @@ void Generator::captureNow() {
 
     log::info("{} read the level at step {} (x={:.0f}, y={:.0f}), {} objects kept", kLogTag,
               m_startOffset, m_level->startX, m_level->start.y, m_capture.kept);
+
+    // What is within reach of the run as it stands. A route that dies on its first step
+    // is either standing in something or being told it is, and the difference is visible
+    // here and nowhere else.
+    {
+        std::vector<int> nearest;
+        for (int index = 0; index < static_cast<int>(m_level->objects.size()); ++index) {
+            nearest.push_back(index);
+        }
+        double sx = m_level->startX;
+        double sy = m_level->start.y;
+        auto distance = [&](int index) {
+            Obj const& o = m_level->objects[static_cast<std::size_t>(index)];
+            double dx = o.x - sx;
+            double dy = o.y - sy;
+            return dx * dx + dy * dy;
+        };
+        std::size_t show = std::min<std::size_t>(6, nearest.size());
+        std::partial_sort(nearest.begin(), nearest.begin() + static_cast<long long>(show),
+                          nearest.end(),
+                          [&](int a, int b) { return distance(a) < distance(b); });
+        for (std::size_t slot = 0; slot < show; ++slot) {
+            Obj const& o = m_level->objects[static_cast<std::size_t>(nearest[slot])];
+            log::info("{}   near the start: id {} kind {} at x={:.1f} y={:.1f}, {:.1f} by {:.1f}{}",
+                      kLogTag, o.id, o.kind, o.x, o.y, o.w, o.h, o.round ? ", round" : "");
+        }
+    }
 
     if (settings().debugLog) {
         log::info("{} {}", kLogTag, m_capture.summary());
