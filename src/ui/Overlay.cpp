@@ -22,10 +22,10 @@ constexpr int kOverlayZ = 1000;
 
 // How far either side of the run to draw. A whole level is tens of thousands of units
 // and a screen is about six hundred.
-constexpr float kReach = 900.f;
+constexpr float kReach = 700.f;
 
 // How far the run has to travel before the picture is worth drawing again.
-constexpr float kRedrawEvery = 200.f;
+constexpr float kRedrawEvery = 90.f;
 
 constexpr ccColor4F kSolid{0.55f, 0.75f, 1.0f, 0.9f};
 constexpr ccColor4F kHazard{1.0f, 0.35f, 0.4f, 0.95f};
@@ -66,13 +66,20 @@ void drawPath(CCDrawNode* draw, std::vector<std::pair<float, float>> const& path
 
 Overlay* Overlay::get() {
     auto* play = PlayLayer::get();
-    if (!play || !play->m_objectLayer) return nullptr;
-    return typeinfo_cast<Overlay*>(play->m_objectLayer->getChildByID(kOverlayId));
+    if (!play) return nullptr;
+    return typeinfo_cast<Overlay*>(play->getChildByID(kOverlayId));
 }
 
+// Hung off the play layer, not off the layer the objects live in.
+//
+// Inside that one it drew in the level's own coordinates for free, which was tidy right
+// up until it started disturbing the game's rendering: that tree is made of batch nodes,
+// and a draw node in the middle of them breaks the batching they exist for. So it sits
+// outside and copies that layer's position and scale every frame instead, which puts its
+// drawing in exactly the same place without being part of it.
 Overlay* Overlay::attachTo(PlayLayer* layer) {
-    if (!layer || !layer->m_objectLayer) return nullptr;
-    if (auto* existing = layer->m_objectLayer->getChildByID(kOverlayId)) {
+    if (!layer) return nullptr;
+    if (auto* existing = layer->getChildByID(kOverlayId)) {
         return typeinfo_cast<Overlay*>(existing);
     }
 
@@ -84,7 +91,7 @@ Overlay* Overlay::attachTo(PlayLayer* layer) {
     }
     overlay->autorelease();
     overlay->setID(kOverlayId);
-    layer->m_objectLayer->addChild(overlay, kOverlayZ);
+    layer->addChild(overlay, kOverlayZ);
     return overlay;
 }
 
@@ -103,6 +110,14 @@ void Overlay::update(float) {
     bool wanted = settings().showOverlay;
     this->setVisible(wanted);
     if (!wanted) return;
+
+    // Follow the level's own layer, so what is drawn in level coordinates lands where
+    // the level is on screen.
+    auto* play = PlayLayer::get();
+    if (!play || !play->m_objectLayer) return;
+    this->setPosition(play->m_objectLayer->getPosition());
+    this->setScale(play->m_objectLayer->getScale());
+    this->setRotation(play->m_objectLayer->getRotation());
 
     Generator const& generator = Generator::get();
     float around = Engine::get().playerX();

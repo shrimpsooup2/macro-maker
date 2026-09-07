@@ -176,9 +176,9 @@
         },
         "show-overlay": {
             "type": "bool",
-            "default": true,
+            "default": false,
             "name": "Show What The Simulator Sees",
-            "description": "Draws the level the way the simulator was given it, straight over the real one: red boxes are what it thinks will kill you, blue what it thinks is solid, yellow the route it planned and cyan the path the game actually took. If a red box is somewhere the level has nothing, that is the bug."
+            "description": "Draws the level the way the simulator was given it, straight over the real one: red boxes are what it thinks will kill you, blue what it thinks is solid, yellow the route it planned and cyan the path the game actually took, with the player's own box in white. Off by default because it is a diagnostic, not decoration."
         },
         "show-hud": {
             "type": "bool",

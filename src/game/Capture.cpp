@@ -2,6 +2,8 @@
 
 #include "Engine.hpp"
 
+#include "sim/Run.hpp"
+
 #include <Geode/Bindings.hpp>
 #include <Geode/Geode.hpp>
 #include <Geode/loader/Mod.hpp>

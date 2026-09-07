@@ -42,7 +42,7 @@ struct Snapshot {
 
     bool autoPlay = false;
 
-    bool showOverlay = true;
+    bool showOverlay = false;
     bool showHud = true;
     double hudY = 0.82;
     double hudScale = 1.0;
