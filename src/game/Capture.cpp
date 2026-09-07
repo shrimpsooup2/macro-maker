@@ -174,6 +174,60 @@ std::string hazardOverlapReport() {
                        state.killedId);
 }
 
+namespace {
+
+struct GroundWatch {
+    double leastStanding = 1e9;     // least of the block the run had under it while standing
+    double mostFalling = 0.0;       // most it had under it while the game still said falling
+    long long standing = 0;
+    long long falling = 0;
+};
+
+GroundWatch& groundWatch() {
+    static GroundWatch state;
+    return state;
+}
+
+} // namespace
+
+void watchGroundContact(Level const* level, float playerX, float playerY, bool onGround) {
+    if (!level) return;
+
+    double w = level->measuredWidth > 0.0 ? level->measuredWidth : 30.0;
+    double h = level->measuredHeight > 0.0 ? level->measuredHeight : 30.0;
+    double centre = playerY + level->measuredOffsetY;
+    double bottom = centre - h * 0.5;
+
+    // How much of a block is under the run, for whichever block it is standing on.
+    double under = 0.0;
+    for (int index : level->nearby(playerX, 60.0)) {
+        Obj const& o = level->objects[static_cast<std::size_t>(index)];
+        if (!isBlocking(o.kind)) continue;
+        if (std::abs(bottom - static_cast<double>(o.top())) > 4.0) continue;
+        double overlap = std::min(playerX + w * 0.5 - static_cast<double>(o.left()),
+                                  static_cast<double>(o.right()) - (playerX - w * 0.5));
+        if (overlap > under) under = overlap;
+    }
+    if (under <= 0.0) return;
+
+    GroundWatch& state = groundWatch();
+    if (onGround) {
+        ++state.standing;
+        if (under < state.leastStanding) state.leastStanding = under;
+    } else {
+        ++state.falling;
+        if (under > state.mostFalling) state.mostFalling = under;
+    }
+}
+
+std::string groundContactReport() {
+    GroundWatch const& state = groundWatch();
+    if (state.standing == 0) return "nothing watched yet";
+    return fmt::format("the game stands on as little as {:.1f} units of block and is still "
+                       "falling on as much as {:.1f} ({} steps standing, {} falling)",
+                       state.leastStanding, state.mostFalling, state.standing, state.falling);
+}
+
 std::string CaptureReport::summary() const {
     return fmt::format("{} objects: {} solid, {} deadly, {} orbs and pads, {} portals; "
                        "dropped {} scenery, {} triggers, {} moved by triggers, {} riding "

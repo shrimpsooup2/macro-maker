@@ -252,6 +252,7 @@ void Generator::noteGameDeath(float x, float y, int objectId) {
     if (m_level) {
         watchHazardOverlap(m_level.get(), x, y, true);
         log::info("{} how deep a hazard has to be to kill: {}", kLogTag, hazardOverlapReport());
+        log::info("{} how much block it takes to stand: {}", kLogTag, groundContactReport());
     }
     if (!busy()) return;
 
@@ -381,6 +382,8 @@ void Generator::watchStep() {
     if (!m_level) return;
     Engine& engine = Engine::get();
     watchHazardOverlap(m_level.get(), engine.playerX(), engine.playerY(), false);
+    watchGroundContact(m_level.get(), engine.playerX(), engine.playerY(),
+                       engine.playerOnGround());
 }
 
 void Generator::beforePhysicsStep() {

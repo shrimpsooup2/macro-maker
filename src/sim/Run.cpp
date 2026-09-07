@@ -674,7 +674,15 @@ void Run::collide() {
         double toCeiling = flipped ? (o.top() - b) : (t - o.bottom());
         double fromSide = std::min<double>(r - o.left(), o.right() - l);
 
-        if (falling && toLanding <= fromSide && toLanding <= toCeiling) {
+        // How much of the block has to be under the run before it counts as standing on
+        // it. A corner is not enough: the game keeps a run falling for about half a
+        // player's width after its box first reaches a platform, which is the difference
+        // between landing when your edge arrives and landing when your middle does. On a
+        // block narrower than that, its whole width will do -- a thin slab is still
+        // something you can stand on.
+        double grip = std::min(w * 0.5, static_cast<double>(o.w));
+
+        if (falling && toLanding <= fromSide && toLanding <= toCeiling && fromSide >= grip) {
             p.y = (flipped ? (o.bottom() - h * 0.5) : (o.top() + h * 0.5)) - lift;
             p.vel = 0.0;
             p.onGround = true;

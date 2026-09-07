@@ -58,6 +58,17 @@ std::size_t knownKillerCount();
 void watchHazardOverlap(Level const* level, float playerX, float playerY, bool died);
 std::string hazardOverlapReport();
 
+// How far onto a platform the run has to be before the game will let it jump.
+//
+// The simulator counts itself as standing the moment its box is over a block's top; the
+// game plainly wants more than that, which is why a jump taken off the start of a
+// platform happens earlier here than it does there. Every step says something: the game
+// reports whether the run is on the ground, and the level says how far onto the block it
+// is, so the least it has ever been while standing and the most it has ever been while
+// still falling put the threshold between them.
+void watchGroundContact(Level const* level, float playerX, float playerY, bool onGround);
+std::string groundContactReport();
+
 // The state the game is in right now, written into the level as where a route starts.
 void captureStartState(Level& level, PlayLayer* layer);
 
