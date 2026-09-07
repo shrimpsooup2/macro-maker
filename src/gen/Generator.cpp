@@ -18,8 +18,13 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
-// How many steps the level is allowed to take before it is moving. Two is normal.
-constexpr int kWarmUpLimit = 60;
+// The step of the run that a route is anchored to. Control is handed over on whichever
+// frame the game gets the level moving -- four steps in at sixty frames a second, more
+// if the frame was slow -- so the anchor sits past any of that.
+constexpr int kAnchorSteps = 24;
+
+// How far the lead-in is allowed to run before something is plainly wrong.
+constexpr int kDriveLimit = 600;
 
 // Playing back at the game's own speed: four physics steps per drawn frame is 240 a
 // second, which is exactly what the game runs at.
@@ -139,50 +144,79 @@ void Generator::onLevelReset() {
     m_note = "the level restarted";
 }
 
+// A reset, and then getting out of the way. The game starts its own levels -- there is a
+// delay, a scheduled call and a settle timer in there -- and pumping update by hand from
+// a standing start does not reproduce any of it: the player simply never moves. So the
+// level is handed back for the frame or two that takes, and taken over on the first
+// frame the run is genuinely travelling.
 void Generator::normalFrame(GJBaseGameLayer* layer) {
     if (!m_layer || !Engine::get().owns(layer)) return;
+    Engine& engine = Engine::get();
 
-    // The only thing that happens on a normally running frame is taking the level over.
-    // Everything else -- resets included -- is done from inside the swallowed update, so
-    // the level stays frozen from the moment a job starts until it is finished, rather
-    // than playing itself into a wall while the search thinks.
-    if (busy() && !Engine::get().driving()) Engine::get().beginDriving();
+    switch (m_phase) {
+        case Phase::Resetting:
+        case Phase::ReplayReset: {
+            m_selfReset = true;
+            engine.resetLevel();
+            m_selfReset = false;
+            m_waited = 0;
+            m_phase = (m_phase == Phase::Resetting) ? Phase::Starting : Phase::ReplayStarting;
+            break;
+        }
+
+        case Phase::Starting:
+        case Phase::ReplayStarting: {
+            ++m_waited;
+            if (engine.movingSteps() >= 1) {
+                engine.beginDriving();
+                if (m_phase == Phase::Starting) {
+                    m_phase = Phase::Capturing;
+                } else {
+                    m_replayAt = 0;
+                    m_replayWarm = false;
+                    m_realPath.clear();
+                    m_phase = Phase::Replaying;
+                }
+                break;
+            }
+            // The game has the level going within a frame or two of a reset. If it has
+            // not, it is waiting to be told to start.
+            if (m_waited == 30) engine.ensureLevelStarted();
+            if (m_waited > 300) {
+                fail(fmt::format("the level never started moving: {} frames, started={}, "
+                                 "dead={}, x={:.0f}",
+                                 m_waited, engine.levelStarted() ? 1 : 0,
+                                 engine.playerIsDead() ? 1 : 0, engine.playerX()));
+            }
+            break;
+        }
+
+        default:
+            break;
+    }
 }
 
 void Generator::driveFrame() {
     Engine& engine = Engine::get();
-
-    if (m_phase == Phase::Resetting) {
-        m_selfReset = true;
-        engine.resetLevel();
-        m_selfReset = false;
-        m_phase = Phase::Capturing;
-        return;
-    }
 
     if (m_phase == Phase::Searching) {
         if (m_searchDone.load(std::memory_order_acquire)) collectSearch();
         return;
     }
 
-    if (m_phase == Phase::ReplayReset) {
-        m_selfReset = true;
-        engine.resetLevel();
-        m_selfReset = false;
-        m_replayAt = 0;
-        m_replayWarm = false;
-        m_realPath.clear();
-        m_phase = Phase::Replaying;
-        return;
-    }
-
     if (m_phase == Phase::Capturing) {
-        int warm = engine.warmUpUntilMoving(kWarmUpLimit);
-        if (warm < 0) {
-            fail("the level would not start moving");
+        // Both the capture and every replay of it start from the same step of the run,
+        // far enough in that the frame the game happened to hand control over on cannot
+        // move it. A tenth of a second is about one block: past anything the level does
+        // to get started, and short of anything it can kill you with.
+        int anchor = std::max(kAnchorSteps, engine.movingSteps());
+        if (engine.driveToStep(anchor, kDriveLimit) < 0) {
+            fail(fmt::format("the run stopped at step {} (x={:.0f}, dead={})",
+                             engine.movingSteps(), engine.playerX(),
+                             engine.playerIsDead() ? 1 : 0));
             return;
         }
-        m_startOffset = warm;
+        m_startOffset = engine.movingSteps();
 
         m_level = captureLevel(m_layer, m_capture);
         if (!m_level || m_level->objects.empty()) {
@@ -217,9 +251,15 @@ void Generator::driveFrame() {
     }
 
     if (!m_replayWarm) {
-        int warm = engine.warmUpUntilMoving(kWarmUpLimit);
-        if (warm < 0) {
-            finishReplay(false);
+        // Catch the run up to the step the route was found from, with the button up.
+        if (engine.movingSteps() > m_startOffset) {
+            log::warn("{} took the level over at step {} but the route starts at {}: the "
+                      "replay is {} steps late",
+                      kLogTag, engine.movingSteps(), m_startOffset,
+                      engine.movingSteps() - m_startOffset);
+        } else if (engine.driveToStep(m_startOffset, kDriveLimit) < 0) {
+            fail(fmt::format("the run died before the route even starts, at step {}",
+                             engine.movingSteps()));
             return;
         }
         m_replayWarm = true;
@@ -311,6 +351,9 @@ void Generator::collectSearch() {
         return;
     }
 
+    // Hand the level back: the reset that a replay starts with happens on a normally
+    // running frame, because that is the only way the game will get it going again.
+    Engine::get().endDriving();
     m_replayVerifying = true;
     m_finishedInGame = false;
     m_phase = Phase::ReplayReset;
@@ -446,11 +489,13 @@ void Generator::settle(std::string note) {
 std::string Generator::headline() const {
     switch (m_phase) {
         case Phase::Resetting:
+        case Phase::Starting:
         case Phase::Capturing:
             return "Reading the level";
         case Phase::Searching:
             return m_round > 0 ? fmt::format("Searching again ({})", m_round) : "Searching";
         case Phase::ReplayReset:
+        case Phase::ReplayStarting:
         case Phase::Replaying:
             return m_replayVerifying ? "Checking the route" : "Playing the macro";
         case Phase::Finished:
@@ -469,6 +514,7 @@ std::string Generator::detail() const {
     switch (m_phase) {
         case Phase::Capturing:
         case Phase::Resetting:
+        case Phase::Starting:
             return "";
         case Phase::Searching: {
             double best = m_progress.bestX.load(std::memory_order_relaxed);

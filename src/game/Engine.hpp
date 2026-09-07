@@ -55,11 +55,22 @@ public:
     void ensureLevelStarted();
     bool levelStarted() const;
 
-    // A level that has just been reset is still sitting on the starting line: the game
-    // has not flagged it as started, and until it does the player will not move however
-    // many steps are fed to it. Both the capture and every replay begin from the step
-    // after this returns, so they all count frames from the same place.
-    int warmUpUntilMoving(int maxSteps);
+    // The run's own clock: physics steps in which the player actually travelled,
+    // counted from the last reset.
+    //
+    // It has to be counted rather than worked out. The game calls PlayerObject::update
+    // more often than it steps its physics -- a third of the steps in the calibration
+    // recordings repeat the previous position exactly -- so a count of calls is not a
+    // count of steps, while a count of the calls that moved the player is. Capture and
+    // replay both anchor on this number, which is what keeps a macro landing on the
+    // frames it was found on.
+    void notePlayerStep(float x);
+    void resetStepClock();
+    int movingSteps() const { return m_movingSteps; }
+
+    // Step, with the button up, until the clock reaches `target`. Returns the number of
+    // steps taken, or -1 if the run died or the level stopped advancing.
+    int driveToStep(int target, int maxSteps);
 
     void resetLevel();
 
@@ -93,6 +104,9 @@ private:
     bool m_died = false;
     bool m_completed = false;
     std::uint64_t m_steps = 0;
+
+    int m_movingSteps = 0;
+    float m_lastPlayerX = -1e9f;
 };
 
 } // namespace mm

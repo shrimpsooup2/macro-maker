@@ -17,9 +17,11 @@ namespace mm {
 enum class Phase {
     Idle,
     Resetting,      // asked the game to put the level back to the start
-    Capturing,      // driving: warm the level up, then read it
+    Starting,       // letting the game get the level going by itself
+    Capturing,      // driving: step up to the anchor, then read the level
     Searching,      // a worker thread is looking for a route
     ReplayReset,    // asked for a reset before playing a route back
+    ReplayStarting,
     Replaying,      // driving: feeding the route into the real game
     Finished,
     Failed,
@@ -98,6 +100,8 @@ private:
     // What the real game has taught the search: cells where a replay actually died.
     AvoidMap m_known;
     int m_round = 0;
+
+    int m_waited = 0;
 
     std::vector<char> m_inputs;
     int m_replayAt = 0;

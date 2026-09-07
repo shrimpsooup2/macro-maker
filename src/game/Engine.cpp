@@ -123,24 +123,35 @@ bool Engine::levelStarted() const {
     return m_layer && m_layer->m_started;
 }
 
-int Engine::warmUpUntilMoving(int maxSteps) {
+void Engine::notePlayerStep(float x) {
+    // Only a step that moved the run counts. The repeats are the game calling the
+    // player's update more often than it advances anything, and the steps before the
+    // level gets going are not part of the run at all.
+    if (x > m_lastPlayerX + 0.01f) ++m_movingSteps;
+    m_lastPlayerX = x;
+}
+
+void Engine::resetStepClock() {
+    m_movingSteps = 0;
+    m_lastPlayerX = -1e9f;
+}
+
+int Engine::driveToStep(int target, int maxSteps) {
     if (!m_layer) return -1;
 
-    ensureLevelStarted();
     setHeld(false);
-
-    float startX = playerX();
-    for (int step = 0; step < maxSteps; ++step) {
-        if (playerX() > startX + 0.01f) return step;
+    for (int taken = 0; taken < maxSteps; ++taken) {
+        if (m_movingSteps >= target) return taken;
         if (stepOnce() != StepResult::Alive) return -1;
     }
-    return playerX() > startX + 0.01f ? maxSteps : -1;
+    return m_movingSteps >= target ? maxSteps : -1;
 }
 
 void Engine::resetLevel() {
     if (!m_layer) return;
     setHeld(false);
     m_layer->resetLevel();
+    resetStepClock();
     m_died = false;
     m_completed = false;
 }

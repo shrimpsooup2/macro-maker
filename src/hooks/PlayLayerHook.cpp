@@ -21,6 +21,8 @@ struct MacroPlayLayer : geode::Modify<MacroPlayLayer, PlayLayer> {
 
     void resetLevel() {
         PlayLayer::resetLevel();
+        // Whoever asked for the reset, the run's clock starts again with it.
+        mm::Engine::get().resetStepClock();
         mm::Generator::get().onLevelReset();
     }
 
