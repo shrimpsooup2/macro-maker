@@ -133,15 +133,25 @@ bool Generator::startRecording() {
     m_recorded.clear();
     m_recordHeld = false;
     m_recordFrom = 0;
+    m_runOver = false;
+    m_runDied = false;
     m_fromRecording = true;
+    Engine::get().clearEvents();
     m_note.clear();
     m_files.clear();
     m_phase = Phase::Recording;
 
-    // From the top, so the macro covers the whole attempt.
+    // From the top, so the take covers the whole attempt.
     m_selfReset = true;
     Engine::get().resetLevel();
     m_selfReset = false;
+
+    // Where the game's clock stands once the level is back at the start. Everything is
+    // written down relative to this and the number is added back on the way out, so it
+    // does not matter whether the game zeroes that clock on a reset or keeps counting.
+    m_recordFrom = Engine::get().gameFrame();
+    log::info("{} recording from frame {} ({:.4f}s of level time)", kLogTag, m_recordFrom,
+              Engine::get().levelTime());
     return true;
 }
 
@@ -167,12 +177,9 @@ void Generator::noteButton(bool down) {
 void Generator::runRecordFrame() {
     Engine& engine = Engine::get();
 
-    if (engine.sawComplete()) {
-        finishRecording("recorded to the end of the level");
-        return;
-    }
-    if (engine.sawDeath() || engine.playerIsDead()) {
-        finishRecording("recorded up to where the run died");
+    if (m_runOver) {
+        finishRecording(m_runDied ? "recorded up to where the run died"
+                                  : "recorded to the end of the level");
         return;
     }
 
@@ -201,7 +208,7 @@ void Generator::finishRecording(std::string why) {
 
     m_phase = Phase::Finished;
     m_note = why;
-    writeOut(Engine::get().sawComplete());
+    writeOut(m_finishedInGame);
 }
 
 void Generator::stop() {
@@ -215,21 +222,49 @@ void Generator::stop() {
 }
 
 bool Generator::suppressingGameplay() const {
-    // Everything from the moment a job starts: the opening the capture is taken from,
-    // the frozen stretch while the search runs, and every replay. A recording is the
-    // exception -- the level belongs to whoever is playing it, deaths and all.
     return busy() && m_phase != Phase::Recording;
 }
 
+void Generator::noteGameDeath(float x, float y, int objectId) {
+    if (!busy()) return;
+
+    log::info("{} the game killed the run at x={:.0f} y={:.0f} on object id {} (step {} of the "
+              "run, {} of the route)",
+              kLogTag, x, y, objectId, Engine::get().movingSteps(),
+              Engine::get().movingSteps() - m_startOffset);
+
+    m_diedAt = x;
+    m_runDied = true;
+    m_runOver = true;
+}
+
+void Generator::noteGameComplete() {
+    if (!busy()) return;
+    m_finishedInGame = true;
+    m_runDied = false;
+    m_runOver = true;
+}
+
 void Generator::onLevelReset() {
-    if (m_phase == Phase::Recording && !m_selfReset) {
-        // A restart while recording just starts the take again.
+    if (m_selfReset || !busy()) return;
+
+    // The game restarts a level of its own accord after a death, which we have already
+    // been told about; that is the attempt ending, not somebody interfering.
+    if (m_runOver) return;
+
+    if (m_phase == Phase::Recording) {
+        // A restart part way through a take just starts the take again.
         m_recorded.clear();
         m_recordHeld = false;
         m_recordFrom = 0;
         return;
     }
-    if (m_selfReset || !busy()) return;
+    if (m_phase == Phase::Replaying) {
+        m_diedAt = Engine::get().playerX();
+        m_runDied = true;
+        m_runOver = true;
+        return;
+    }
 
     // The player restarted the level from under us, so whatever was going on is over.
     m_cancel.store(true, std::memory_order_relaxed);
@@ -255,6 +290,9 @@ void Generator::normalFrame(GJBaseGameLayer* layer) {
             engine.resetLevel();
             m_selfReset = false;
             m_waited = 0;
+            m_runOver = false;
+            m_runDied = false;
+            engine.clearEvents();
             if (m_phase == Phase::Resetting) {
                 m_phase = Phase::Starting;
             } else {
@@ -307,7 +345,7 @@ void Generator::frozenFrame() {
 }
 
 void Generator::beforePhysicsStep() {
-    if (m_phase != Phase::Replaying) return;
+    if (m_phase != Phase::Replaying || m_runOver) return;
 
     Engine& engine = Engine::get();
     int index = engine.movingSteps() - m_startOffset;
@@ -496,19 +534,8 @@ void Generator::runReplayFrame() {
 bool Generator::checkReplayEnded() {
     Engine& engine = Engine::get();
 
-    if (engine.sawComplete()) {
-        m_finishedInGame = true;
-        finishReplay(true);
-        return true;
-    }
-    if (engine.sawDeath() || engine.playerIsDead()) {
-        m_diedAt = engine.playerX();
-        int index = engine.movingSteps() - m_startOffset;
-        log::info("{} the replay ended at x={:.0f}: step {} of the run, {} of the route, "
-                  "reported={}, flagged={}",
-                  kLogTag, m_diedAt, engine.movingSteps(), index, engine.sawDeath() ? 1 : 0,
-                  engine.playerIsDead() ? 1 : 0);
-        finishReplay(false);
+    if (m_runOver) {
+        finishReplay(!m_runDied);
         return true;
     }
     if (engine.movingSteps() - m_startOffset >= static_cast<int>(m_inputs.size())) {

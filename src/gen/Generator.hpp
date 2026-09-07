@@ -68,8 +68,12 @@ public:
 
     void onLevelReset();
 
-    // While a route is being played back a death is information, not the player losing a
-    // run, so the game is never told it happened.
+    // The game killed the run, or finished the level. Called from the game's own
+    // handlers, so these only write down what happened: the work waits for a frame.
+    void noteGameDeath(float x, float y, int objectId);
+    void noteGameComplete();
+
+    // Whether the player's own input should stay out of the level for now.
     bool suppressingGameplay() const;
 
     std::string headline() const;
@@ -143,6 +147,11 @@ private:
     // The last stretch of the real replay, so a death can make the approach to it
     // expensive rather than only the spot itself.
     std::vector<std::pair<float, float>> m_realPath;
+
+    // Set by the game's own death and completion handlers; acted on next frame, since
+    // resetting or searching from inside them is asking for trouble.
+    bool m_runOver = false;
+    bool m_runDied = false;
 
     bool m_selfReset = false;
     bool m_finishedInGame = false;
