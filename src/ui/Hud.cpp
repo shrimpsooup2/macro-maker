@@ -31,7 +31,6 @@ ccColor3B colourFor(Phase phase) {
             return ccColor3B{120, 200, 255};
         case Phase::Replaying:
         case Phase::ReplayReset:
-        case Phase::ReplayStarting:
             return ccColor3B{255, 220, 110};
         case Phase::Finished:
             return ccColor3B{130, 255, 160};

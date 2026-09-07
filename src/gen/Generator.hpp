@@ -17,12 +17,10 @@ namespace mm {
 enum class Phase {
     Idle,
     Resetting,      // asked the game to put the level back to the start
-    Starting,       // letting the game get the level going by itself
-    Capturing,      // driving: step up to the anchor, then read the level
-    Searching,      // a worker thread is looking for a route
+    Starting,       // letting the game run the opening of the level itself
+    Searching,      // the level is frozen while a worker thread looks for a route
     ReplayReset,    // asked for a reset before playing a route back
-    ReplayStarting,
-    Replaying,      // driving: feeding the route into the real game
+    Replaying,      // the route is being fed into the real game, step by step
     Finished,
     Failed,
 };
@@ -49,12 +47,17 @@ public:
     bool startPlayback();
     void stop();
 
-    // The game's own update ran this frame; anything that needs a normally running level
-    // happens here.
+    // The game ran a frame of its own.
     void normalFrame(GJBaseGameLayer* layer);
 
-    // The game's update was swallowed: the level is ours to step by hand.
-    void driveFrame();
+    // The game's update was swallowed because the level is being held still.
+    void frozenFrame();
+
+    // One physics step is about to happen: this is where a route's button state goes in.
+    void beforePhysicsStep();
+
+    // Whether the player's own input should be kept out of the level for now.
+    bool holdingTheControls() const { return busy(); }
 
     void onLevelReset();
 
@@ -71,11 +74,13 @@ public:
 private:
     Generator() = default;
 
+    void captureNow();
     void launchSearch();
     void collectSearch();
     void joinWorker();
 
-    void beginReplay(bool forVerification);
+    void runReplayFrame();
+    bool checkReplayEnded();
     void finishReplay(bool survived);
     void noteRealDeath();
 
@@ -100,14 +105,20 @@ private:
     // What the real game has taught the search: cells where a replay actually died.
     AvoidMap m_known;
     int m_round = 0;
-
     int m_waited = 0;
 
     std::vector<char> m_inputs;
     int m_replayAt = 0;
+    int m_lastFedIndex = -1;
     bool m_replayVerifying = false;
-    bool m_replayWarm = false;
+
+    // The step of the run a route starts from. Every replay begins feeding the route on
+    // exactly this step, whichever frame the game happens to reach it on.
     int m_startOffset = 0;
+
+    // Whether running the game beyond its own frames actually advances it. If it does
+    // not, a check simply happens at normal speed instead of failing.
+    bool m_fastWorks = true;
 
     // The last stretch of the real replay, so a death can make the approach to it
     // expensive rather than only the spot itself.

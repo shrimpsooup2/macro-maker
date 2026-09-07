@@ -106,7 +106,6 @@ std::string pauseButtonLabel() {
         case Phase::Capturing:
         case Phase::Searching:
         case Phase::ReplayReset:
-        case Phase::ReplayStarting:
         case Phase::Replaying:
             return "Stop";
         case Phase::Finished:

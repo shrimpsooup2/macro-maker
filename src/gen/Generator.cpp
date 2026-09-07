@@ -18,17 +18,22 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
-// The step of the run that a route is anchored to. Control is handed over on whichever
-// frame the game gets the level moving -- four steps in at sixty frames a second, more
-// if the frame was slow -- so the anchor sits past any of that.
+// The step of the run a route is anchored to. The game opens a level with a delay and a
+// settle timer of its own, and it runs four steps for every frame it draws, so the
+// anchor sits far enough in that none of that can move it -- a tenth of a second, about
+// one block: past anything the level does to get started, short of anything that can
+// kill you.
 constexpr int kAnchorSteps = 24;
 
-// How far the lead-in is allowed to run before something is plainly wrong.
-constexpr int kDriveLimit = 600;
+// How long to wait for a level to get going before deciding it never will.
+constexpr int kStartFrames = 300;
 
-// Playing back at the game's own speed: four physics steps per drawn frame is 240 a
-// second, which is exactly what the game runs at.
-constexpr int kWatchStepsPerFrame = 4;
+// A frame's worth of game, which is what an extra update is asked for.
+constexpr double kFrameSeconds = 1.0 / 60.0;
+
+// How many extra updates may buy nothing at all before a fast check gives up and lets
+// the level run at its own speed instead.
+constexpr int kBarrenLimit = 8;
 
 // A death in the real game is worth more than one in the simulator, because it is the
 // only kind that is certainly true.
@@ -57,13 +62,14 @@ void Generator::attach(PlayLayer* layer) {
     m_phase = Phase::Idle;
     m_note.clear();
     m_files.clear();
+    m_fastWorks = true;
 }
 
 void Generator::detach() {
     m_cancel.store(true, std::memory_order_relaxed);
     joinWorker();
 
-    Engine::get().endDriving();
+    Engine::get().unfreeze();
 
     m_layer = nullptr;
     m_phase = Phase::Idle;
@@ -105,6 +111,7 @@ bool Generator::startMaking() {
     m_note.clear();
     m_finishedInGame = false;
     m_diedAt = 0.0;
+    m_fastWorks = true;
     m_phase = Phase::Resetting;
     return true;
 }
@@ -130,7 +137,9 @@ void Generator::stop() {
 }
 
 bool Generator::suppressingGameplay() const {
-    return Engine::get().driving();
+    // Everything from the moment a job starts: the opening the capture is taken from,
+    // the frozen stretch while the search runs, and every replay.
+    return busy();
 }
 
 void Generator::onLevelReset() {
@@ -139,16 +148,16 @@ void Generator::onLevelReset() {
     // The player restarted the level from under us, so whatever was going on is over.
     m_cancel.store(true, std::memory_order_relaxed);
     joinWorker();
-    Engine::get().endDriving();
+    Engine::get().unfreeze();
     m_phase = Phase::Failed;
     m_note = "the level restarted";
 }
 
-// A reset, and then getting out of the way. The game starts its own levels -- there is a
-// delay, a scheduled call and a settle timer in there -- and pumping update by hand from
-// a standing start does not reproduce any of it: the player simply never moves. So the
-// level is handed back for the frame or two that takes, and taken over on the first
-// frame the run is genuinely travelling.
+// The game runs its own frames throughout. Pinning its delta and pumping update by hand
+// was tried first and the game would not have it -- eight updates of exactly one step's
+// length bought one step between them, and the run died inside the settling frames it
+// had been made to skip -- so the level is left to run at the rate it always runs at,
+// and everything here is timed off the physics steps it reports.
 void Generator::normalFrame(GJBaseGameLayer* layer) {
     if (!m_layer || !Engine::get().owns(layer)) return;
     Engine& engine = Engine::get();
@@ -160,29 +169,27 @@ void Generator::normalFrame(GJBaseGameLayer* layer) {
             engine.resetLevel();
             m_selfReset = false;
             m_waited = 0;
-            m_phase = (m_phase == Phase::Resetting) ? Phase::Starting : Phase::ReplayStarting;
+            if (m_phase == Phase::Resetting) {
+                m_phase = Phase::Starting;
+            } else {
+                m_replayAt = 0;
+                m_lastFedIndex = -1;
+                m_realPath.clear();
+                m_phase = Phase::Replaying;
+            }
             break;
         }
 
-        case Phase::Starting:
-        case Phase::ReplayStarting: {
+        case Phase::Starting: {
             ++m_waited;
-            if (engine.movingSteps() >= 1) {
-                engine.beginDriving();
-                if (m_phase == Phase::Starting) {
-                    m_phase = Phase::Capturing;
-                } else {
-                    m_replayAt = 0;
-                    m_replayWarm = false;
-                    m_realPath.clear();
-                    m_phase = Phase::Replaying;
-                }
+            if (engine.movingSteps() >= kAnchorSteps) {
+                captureNow();
                 break;
             }
-            // The game has the level going within a frame or two of a reset. If it has
+            // The game has a level going within a frame or two of a reset. If it has
             // not, it is waiting to be told to start.
             if (m_waited == 30) engine.ensureLevelStarted();
-            if (m_waited > 300) {
+            if (m_waited > kStartFrames) {
                 fail(fmt::format("the level never started moving: {} frames, started={}, "
                                  "dead={}, x={:.0f}",
                                  m_waited, engine.levelStarted() ? 1 : 0,
@@ -191,128 +198,86 @@ void Generator::normalFrame(GJBaseGameLayer* layer) {
             break;
         }
 
+        case Phase::Replaying:
+            runReplayFrame();
+            break;
+
         default:
             break;
     }
 }
 
-void Generator::driveFrame() {
-    Engine& engine = Engine::get();
-
+void Generator::frozenFrame() {
     if (m_phase == Phase::Searching) {
         if (m_searchDone.load(std::memory_order_acquire)) collectSearch();
         return;
     }
+    // Nothing else has any business holding the level still.
+    Engine::get().unfreeze();
+}
 
-    if (m_phase == Phase::Capturing) {
-        // What one update of the game is worth has to be measured before anything can be
-        // driven by hand. It is done here, inside the lead-in, so whatever it costs is
-        // behind the step the route starts from.
-        if (!engine.calibrated() && !engine.calibrateStep()) {
-            fail(fmt::format("could not step the level by hand: {}", engine.calibrationNote()));
-            return;
-        }
+void Generator::beforePhysicsStep() {
+    if (m_phase != Phase::Replaying) return;
 
-        // Both the capture and every replay of it start from the same step of the run,
-        // far enough in that the frame the game happened to hand control over on cannot
-        // move it. A tenth of a second is about one block: past anything the level does
-        // to get started, and short of anything it can kill you with.
-        int anchor = std::max(kAnchorSteps, engine.movingSteps());
-        if (engine.driveToStep(anchor, kDriveLimit) < 0) {
-            fail(fmt::format("the run stopped at step {} of {} (x={:.0f}, dead={}, {})",
-                             engine.movingSteps(), anchor, engine.playerX(),
-                             engine.playerIsDead() ? 1 : 0, engine.calibrationNote()));
-            return;
-        }
-        m_startOffset = engine.movingSteps();
+    Engine& engine = Engine::get();
+    int index = engine.movingSteps() - m_startOffset;
+    if (index < 0) return;                          // still in the opening
 
-        m_level = captureLevel(m_layer, m_capture);
-        if (!m_level || m_level->objects.empty()) {
-            fail("there is nothing in this level to read");
-            return;
-        }
-        captureStartState(*m_level, m_layer);
-
-        log::info("{} stepping the level by hand: {}, route starts at step {}", kLogTag,
-                  engine.calibrationNote(), m_startOffset);
-
-        if (settings().debugLog) {
-            log::info("{} {}", kLogTag, m_capture.summary());
-            log::info("{} start: {} at x={:.0f} y={:.0f}, speed {}, length {:.0f}", kLogTag,
-                      modeName(m_level->start.mode), m_level->startX, m_level->start.y,
-                      m_level->start.speed, m_level->length);
-            // The player and the objects have to be in the same coordinates for any of
-            // this to mean anything. A cube standing on the ground reads y=105 and the
-            // floor is taken to be at 90, so a start much below that says they are not.
-            log::info("{} the level as the simulator sees it: {}", kLogTag,
-                      dumpCapture(*m_level));
-        }
-        if (m_capture.hasDual) {
-            log::warn("{} this level has a dual portal, which the simulator does not model",
-                      kLogTag);
-        }
-
-        launchSearch();
+    if (index >= static_cast<int>(m_inputs.size())) {
+        engine.setHeld(false);
         return;
     }
 
-    if (m_phase != Phase::Replaying) {
-        release();
-        return;
-    }
+    engine.setHeld(m_inputs[static_cast<std::size_t>(index)] != 0);
 
-    if (!m_replayWarm) {
-        // Catch the run up to the step the route was found from, with the button up.
-        if (engine.movingSteps() > m_startOffset) {
-            log::warn("{} took the level over at step {} but the route starts at {}: the "
-                      "replay is {} steps late",
-                      kLogTag, engine.movingSteps(), m_startOffset,
-                      engine.movingSteps() - m_startOffset);
-        } else if (engine.driveToStep(m_startOffset, kDriveLimit) < 0) {
-            fail(fmt::format("the run died before the route even starts, at step {}",
-                             engine.movingSteps()));
-            return;
-        }
-        m_replayWarm = true;
-    }
-
-    // Normally one update is one physics step. Where the game refuses to be stepped that
-    // finely, the route still has to advance at the rate it was found at, so the clock
-    // moves by whatever an update actually buys.
-    int perUpdate = std::max(1, engine.stepsPerUpdate());
-    bool fast = m_replayVerifying && settings().verify == VerifyMode::Fast;
-    auto until = Clock::now() + std::chrono::duration_cast<Clock::duration>(
-                                    std::chrono::duration<double, std::milli>(settings().verifyMs));
-
-    for (int taken = 0;; ++taken) {
-        if (!fast && taken * perUpdate >= kWatchStepsPerFrame) return;
-        if (fast && taken > 0 && (taken & 7) == 0 && Clock::now() > until) return;
-
-        if (m_replayAt >= static_cast<int>(m_inputs.size())) {
-            finishReplay(true);
-            return;
-        }
-
-        engine.setHeld(m_inputs[static_cast<std::size_t>(m_replayAt)] != 0);
-        StepResult result = engine.stepOnce();
-        m_replayAt += perUpdate;
+    // The game offers a step's input more than once -- a half tick and a full one -- so
+    // the route only advances when the clock has actually moved on.
+    if (index != m_lastFedIndex) {
+        m_lastFedIndex = index;
+        m_replayAt = index + 1;
         m_realPath.emplace_back(engine.playerX(), engine.playerY());
-
-        if (result == StepResult::Finished) {
-            m_finishedInGame = true;
-            finishReplay(true);
-            return;
-        }
-        if (result == StepResult::Dead) {
-            m_diedAt = engine.playerX();
-            finishReplay(false);
-            return;
-        }
     }
+}
+
+void Generator::captureNow() {
+    Engine& engine = Engine::get();
+
+    // Hold the level still from here: the search reads it as it stands, and nothing
+    // should move under it while that happens.
+    engine.freeze();
+    m_startOffset = engine.movingSteps();
+
+    m_level = captureLevel(m_layer, m_capture);
+    if (!m_level || m_level->objects.empty()) {
+        fail("there is nothing in this level to read");
+        return;
+    }
+    captureStartState(*m_level, m_layer);
+
+    log::info("{} read the level at step {} (x={:.0f}, y={:.0f}), {} objects kept", kLogTag,
+              m_startOffset, m_level->startX, m_level->start.y, m_capture.kept);
+
+    if (settings().debugLog) {
+        log::info("{} {}", kLogTag, m_capture.summary());
+        log::info("{} start: {} speed {}, length {:.0f}", kLogTag, modeName(m_level->start.mode),
+                  m_level->start.speed, m_level->length);
+        // The player and the objects have to be in the same coordinates for any of this
+        // to mean anything. A cube standing on the ground reads y=105 and the floor is
+        // taken to be at 90, so a start much below that says they are not.
+        log::info("{} the level as the simulator sees it: {}", kLogTag, dumpCapture(*m_level));
+    }
+    if (m_capture.hasDual) {
+        log::warn("{} this level has a dual portal, which the simulator does not model", kLogTag);
+    }
+
+    launchSearch();
 }
 
 void Generator::launchSearch() {
     joinWorker();
+
+    // The level stays still while the thread works.
+    Engine::get().freeze();
 
     m_cancel.store(false, std::memory_order_relaxed);
     m_searchDone.store(false, std::memory_order_relaxed);
@@ -346,11 +311,11 @@ void Generator::collectSearch() {
     m_pending = SearchResult{};
     m_inputs = m_result.inputs;
 
+    log::info("{} round {}: {} at {} after {} states{}", kLogTag, m_round,
+              m_result.solved ? "solved" : "stopped",
+              percentOf(m_result.reachedX, m_result.length), m_result.expansions,
+              m_result.note.empty() ? "" : (", " + m_result.note));
     if (settings().debugLog) {
-        log::info("{} round {}: {} at {} after {} states{}", kLogTag, m_round,
-                  m_result.solved ? "solved" : "stopped",
-                  percentOf(m_result.reachedX, m_result.length), m_result.expansions,
-                  m_result.note.empty() ? "" : (", " + m_result.note));
         for (auto const& entry : m_result.deaths) {
             log::info("{}   {} x{}", kLogTag, describe(entry.death), entry.times);
         }
@@ -366,17 +331,65 @@ void Generator::collectSearch() {
         return;
     }
 
-    // Hand the level back: the reset that a replay starts with happens on a normally
-    // running frame, because that is the only way the game will get it going again.
-    Engine::get().endDriving();
+    // Let the level run again: a replay starts with a reset, and the game has to be
+    // running its own frames to get a level going.
+    Engine::get().unfreeze();
     m_replayVerifying = true;
     m_finishedInGame = false;
     m_phase = Phase::ReplayReset;
 }
 
+void Generator::runReplayFrame() {
+    if (checkReplayEnded()) return;
+
+    // Watching a route play, and playing a finished macro, both happen at the game's own
+    // speed. Only a check that nobody is watching is worth hurrying.
+    if (!m_replayVerifying || settings().verify != VerifyMode::Fast || !m_fastWorks) return;
+
+    Engine& engine = Engine::get();
+    auto until = Clock::now() + std::chrono::duration_cast<Clock::duration>(
+                                    std::chrono::duration<double, std::milli>(settings().verifyMs));
+
+    int barren = 0;
+    while (Clock::now() < until) {
+        int gained = engine.extraUpdate(kFrameSeconds);
+        if (gained < 0) return;
+        if (gained == 0) {
+            if (++barren >= kBarrenLimit) {
+                m_fastWorks = false;
+                log::warn("{} extra updates are not advancing this level, so the route is being "
+                          "checked at normal speed instead",
+                          kLogTag);
+                return;
+            }
+            continue;
+        }
+        barren = 0;
+        if (checkReplayEnded()) return;
+    }
+}
+
+bool Generator::checkReplayEnded() {
+    Engine& engine = Engine::get();
+
+    if (engine.sawComplete()) {
+        m_finishedInGame = true;
+        finishReplay(true);
+        return true;
+    }
+    if (engine.sawDeath() || engine.playerIsDead()) {
+        m_diedAt = engine.playerX();
+        finishReplay(false);
+        return true;
+    }
+    if (engine.movingSteps() - m_startOffset >= static_cast<int>(m_inputs.size())) {
+        finishReplay(true);
+        return true;
+    }
+    return false;
+}
+
 void Generator::finishReplay(bool survived) {
-    // The level stays frozen between rounds: the next thing that happens to it is either
-    // a reset for another replay, or being handed back to the player.
     if (!m_replayVerifying) {
         settle(survived ? "played the macro" : "the macro died in play");
         return;
@@ -408,8 +421,8 @@ void Generator::finishReplay(bool survived) {
         return;
     }
 
-    log::info("{} the game killed the route at x={:.0f} ({}), searching again (round {})",
-              kLogTag, m_diedAt, percentOf(m_diedAt, m_result.length), m_round);
+    log::info("{} the game killed the route at x={:.0f} ({}), searching again (round {})", kLogTag,
+              m_diedAt, percentOf(m_diedAt, m_result.length), m_round);
     launchSearch();
 }
 
@@ -438,8 +451,8 @@ void Generator::writeOut(bool complete) {
     info.levelName = m_level ? m_level->levelName : std::string("Unknown");
     info.levelId = m_level ? m_level->levelId : 0;
     info.complete = complete;
-    info.reachedPercent = complete ? 100.0
-                                   : 100.0 * m_result.reachedX / std::max(1.0, m_result.length);
+    info.reachedPercent =
+        complete ? 100.0 : 100.0 * m_result.reachedX / std::max(1.0, m_result.length);
     info.startOffset = m_startOffset;
 
     MacroFormats formats;
@@ -459,16 +472,16 @@ void Generator::writeOut(bool complete) {
     std::string where = m_files.empty() ? std::string() : m_files.front();
     log::info("{} wrote {} macro file(s), first at {}", kLogTag, m_files.size(), where);
 
-    std::string headline = complete ? "Macro written: full route"
-                                    : fmt::format("Macro written: {} of the level",
-                                                  percentOf(m_result.reachedX, m_result.length));
-    Notification::create(headline, complete ? NotificationIcon::Success
-                                            : NotificationIcon::Warning)
+    std::string headline =
+        complete ? "Macro written: full route"
+                 : fmt::format("Macro written: {} of the level",
+                               percentOf(m_result.reachedX, m_result.length));
+    Notification::create(headline,
+                         complete ? NotificationIcon::Success : NotificationIcon::Warning)
         ->show();
 
     if (m_note.empty()) {
-        m_note = complete ? "the real game played it to the end"
-                          : "kept the best route it had";
+        m_note = complete ? "the real game played it to the end" : "kept the best route it had";
     }
     settle(m_note);
 
@@ -479,12 +492,11 @@ void Generator::writeOut(bool complete) {
 // stopped, since that is usually the player wedged inside whatever killed the route.
 void Generator::release() {
     Engine& engine = Engine::get();
-    if (engine.driving()) {
-        m_selfReset = true;
-        engine.resetLevel();
-        m_selfReset = false;
-        engine.endDriving();
-    }
+    engine.unfreeze();
+    if (!engine.valid()) return;
+    m_selfReset = true;
+    engine.resetLevel();
+    m_selfReset = false;
 }
 
 void Generator::fail(std::string why) {
@@ -505,12 +517,10 @@ std::string Generator::headline() const {
     switch (m_phase) {
         case Phase::Resetting:
         case Phase::Starting:
-        case Phase::Capturing:
             return "Reading the level";
         case Phase::Searching:
             return m_round > 0 ? fmt::format("Searching again ({})", m_round) : "Searching";
         case Phase::ReplayReset:
-        case Phase::ReplayStarting:
         case Phase::Replaying:
             return m_replayVerifying ? "Checking the route" : "Playing the macro";
         case Phase::Finished:
@@ -527,7 +537,6 @@ std::string Generator::detail() const {
     double length = m_level ? std::max(1.0, m_level->length) : 1.0;
 
     switch (m_phase) {
-        case Phase::Capturing:
         case Phase::Resetting:
         case Phase::Starting:
             return "";
@@ -538,6 +547,7 @@ std::string Generator::detail() const {
             return fmt::format("{} reached, beam {}, {}k states", percentOf(best, length), width,
                                states / 1000);
         }
+        case Phase::ReplayReset:
         case Phase::Replaying: {
             float x = Engine::get().playerX();
             return fmt::format("{} of the way", percentOf(x, length));
