@@ -1,4 +1,5 @@
 #include "game/Engine.hpp"
+#include "game/SlopeProbe.hpp"
 #include "gen/Generator.hpp"
 
 #include <Geode/Geode.hpp>
@@ -20,6 +21,7 @@ struct MacroPlayer : geode::Modify<MacroPlayer, PlayerObject> {
         auto* play = PlayLayer::get();
         if (play && play->m_player1 == this) {
             mm::Engine::get().notePlayerStep(this->getPositionX());
+            mm::slopeProbeStep(play);
         }
     }
 

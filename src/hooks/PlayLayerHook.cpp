@@ -1,4 +1,5 @@
 #include "game/Engine.hpp"
+#include "game/SlopeProbe.hpp"
 #include "gen/Generator.hpp"
 #include "settings/Settings.hpp"
 #include "ui/Hud.hpp"
@@ -20,6 +21,7 @@ struct MacroPlayLayer : geode::Modify<MacroPlayLayer, PlayLayer> {
         mm::Generator::get().attach(this);
         mm::Hud::attachTo(this);
         mm::Overlay::attachTo(this);
+        mm::slopeProbeReset(this);
 
         // Before this mod has done anything at all: is there something lethal sitting on
         // the spawn? If there is, it was not us that put it there.
@@ -85,12 +87,14 @@ struct MacroPlayLayer : geode::Modify<MacroPlayLayer, PlayLayer> {
     }
 
     void levelComplete() {
+        mm::slopeProbeFlush();
         mm::Generator::get().noteGameComplete();
         mm::Engine::get().notifyComplete();
         PlayLayer::levelComplete();
     }
 
     void onQuit() {
+        mm::slopeProbeFlush();
         mm::Generator::get().detach();
         mm::Engine::get().detach();
         PlayLayer::onQuit();
