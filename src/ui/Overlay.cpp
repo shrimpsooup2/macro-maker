@@ -1,0 +1,153 @@
+#include "Overlay.hpp"
+
+#include "game/Engine.hpp"
+#include "gen/Generator.hpp"
+#include "settings/Settings.hpp"
+
+#include <Geode/Bindings.hpp>
+#include <Geode/Geode.hpp>
+#include <algorithm>
+#include <cmath>
+
+using namespace geode::prelude;
+using namespace cocos2d;
+
+namespace mm {
+
+namespace {
+
+constexpr char const* kOverlayId = "macro-overlay"_spr;
+constexpr int kOverlayZ = 1000;
+
+// How far either side of the run to draw. A whole level is tens of thousands of units
+// and a screen is about six hundred.
+constexpr float kReach = 900.f;
+
+// How far the run has to travel before the picture is worth drawing again.
+constexpr float kRedrawEvery = 200.f;
+
+constexpr ccColor4F kSolid{0.55f, 0.75f, 1.0f, 0.9f};
+constexpr ccColor4F kHazard{1.0f, 0.35f, 0.4f, 0.95f};
+constexpr ccColor4F kSlope{0.5f, 1.0f, 0.6f, 0.9f};
+constexpr ccColor4F kSpecial{1.0f, 0.85f, 0.3f, 0.95f};
+constexpr ccColor4F kNothing{0.f, 0.f, 0.f, 0.f};
+constexpr ccColor4F kPlanned{1.0f, 0.9f, 0.2f, 0.95f};
+constexpr ccColor4F kReal{0.4f, 0.9f, 1.0f, 0.95f};
+constexpr ccColor4F kGround{1.0f, 1.0f, 1.0f, 0.35f};
+
+ccColor4F colourFor(int kind) {
+    if (isDeadly(kind)) return kHazard;
+    if (kind == KSlope) return kSlope;
+    if (isBlocking(kind)) return kSolid;
+    return kSpecial;
+}
+
+void drawBox(CCDrawNode* draw, float left, float bottom, float right, float top,
+             ccColor4F const& colour) {
+    CCPoint corners[4] = {ccp(left, bottom), ccp(right, bottom), ccp(right, top),
+                          ccp(left, top)};
+    draw->drawPolygon(corners, 4, kNothing, 1.f, colour);
+}
+
+void drawPath(CCDrawNode* draw, std::vector<std::pair<float, float>> const& path, float around,
+              ccColor4F const& colour) {
+    for (std::size_t index = 1; index < path.size(); ++index) {
+        auto const& from = path[index - 1];
+        auto const& to = path[index];
+        if (to.first < around - kReach || from.first > around + kReach) continue;
+        draw->drawSegment(ccp(from.first, from.second), ccp(to.first, to.second), 1.2f, colour);
+    }
+}
+
+} // namespace
+
+Overlay* Overlay::get() {
+    auto* play = PlayLayer::get();
+    if (!play || !play->m_objectLayer) return nullptr;
+    return typeinfo_cast<Overlay*>(play->m_objectLayer->getChildByID(kOverlayId));
+}
+
+Overlay* Overlay::attachTo(PlayLayer* layer) {
+    if (!layer || !layer->m_objectLayer) return nullptr;
+    if (auto* existing = layer->m_objectLayer->getChildByID(kOverlayId)) {
+        return typeinfo_cast<Overlay*>(existing);
+    }
+
+    auto* overlay = new (std::nothrow) Overlay();
+    if (!overlay) return nullptr;
+    if (!overlay->init()) {
+        delete overlay;
+        return nullptr;
+    }
+    overlay->autorelease();
+    overlay->setID(kOverlayId);
+    layer->m_objectLayer->addChild(overlay, kOverlayZ);
+    return overlay;
+}
+
+bool Overlay::init() {
+    if (!CCNode::init()) return false;
+
+    m_draw = CCDrawNode::create();
+    if (!m_draw) return false;
+    this->addChild(m_draw);
+
+    this->scheduleUpdate();
+    return true;
+}
+
+void Overlay::update(float) {
+    bool wanted = settings().showOverlay;
+    this->setVisible(wanted);
+    if (!wanted) return;
+
+    Generator const& generator = Generator::get();
+    float around = Engine::get().playerX();
+
+    // Redrawing every frame would be pointless: the picture only changes when the level
+    // is read again, when a route arrives, or when the run has travelled far enough that
+    // a different part of the level is on screen.
+    if (generator.drawVersion() == m_shownVersion &&
+        std::abs(around - m_shownAround) < kRedrawEvery) {
+        return;
+    }
+    m_shownVersion = generator.drawVersion();
+    m_shownAround = around;
+    redraw();
+}
+
+void Overlay::redraw() {
+    if (!m_draw) return;
+    m_draw->clear();
+
+    Generator const& generator = Generator::get();
+    float around = m_shownAround;
+
+    // The floor the simulator believes in. If this line is not sitting on the ground the
+    // game draws, nothing else on this picture means anything.
+    m_draw->drawSegment(ccp(around - kReach, static_cast<float>(kGroundTop)),
+                        ccp(around + kReach, static_cast<float>(kGroundTop)), 1.f, kGround);
+
+    if (Level const* level = generator.capturedLevel()) {
+        for (auto const& o : level->objects) {
+            if (o.x < around - kReach) continue;
+            if (o.x > around + kReach) break;      // objects are sorted by x
+            drawBox(m_draw, o.left(), o.bottom(), o.right(), o.top(), colourFor(o.kind));
+        }
+    }
+
+    drawPath(m_draw, generator.plannedPath(), around, kPlanned);
+    drawPath(m_draw, generator.realPath(), around, kReal);
+
+    // Where each side thinks it went wrong.
+    auto planned = generator.plannedEnd();
+    if (planned.first != 0.f || planned.second != 0.f) {
+        m_draw->drawDot(ccp(planned.first, planned.second), 6.f, kPlanned);
+    }
+    auto real = generator.realEnd();
+    if (real.first != 0.f || real.second != 0.f) {
+        m_draw->drawDot(ccp(real.first, real.second), 6.f, kHazard);
+    }
+}
+
+} // namespace mm

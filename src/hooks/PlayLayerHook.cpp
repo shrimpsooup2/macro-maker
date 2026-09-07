@@ -2,8 +2,11 @@
 #include "gen/Generator.hpp"
 #include "settings/Settings.hpp"
 #include "ui/Hud.hpp"
+#include "ui/Overlay.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/utils/cocos.hpp>
+#include <cmath>
 #include <Geode/modify/PlayLayer.hpp>
 
 using namespace geode::prelude;
@@ -16,6 +19,26 @@ struct MacroPlayLayer : geode::Modify<MacroPlayLayer, PlayLayer> {
         mm::Engine::get().attach(this);
         mm::Generator::get().attach(this);
         mm::Hud::attachTo(this);
+        mm::Overlay::attachTo(this);
+
+        // Before this mod has done anything at all: is there something lethal sitting on
+        // the spawn? If there is, it was not us that put it there.
+        if (m_player1 && m_objects) {
+            float x = m_player1->getPositionX();
+            float y = m_player1->getPositionY();
+            for (auto* object : CCArrayExt<GameObject*>(m_objects)) {
+                if (!object) continue;
+                int type = static_cast<int>(object->m_objectType);
+                if (type != 2 && type != 47) continue;
+                auto const& rect = object->getObjectRect();
+                float ox = rect.origin.x + rect.size.width * 0.5f;
+                float oy = rect.origin.y + rect.size.height * 0.5f;
+                if (std::abs(ox - x) > 40.f || std::abs(oy - y) > 40.f) continue;
+                log::warn("{} on opening the level there is already a hazard on the spawn: id {} "
+                          "at ({:.1f}, {:.1f})",
+                          mm::kLogTag, object->m_objectID, ox, oy);
+            }
+        }
         return true;
     }
 

@@ -83,6 +83,15 @@ public:
 
     std::vector<std::string> const& lastFiles() const { return m_files; }
 
+    // What the overlay draws: the level as the simulator was given it, the route it
+    // planned, the path the real game actually took, and where each of them ended.
+    Level const* capturedLevel() const { return m_level.get(); }
+    std::vector<std::pair<float, float>> const& plannedPath() const { return m_plannedPath; }
+    std::vector<std::pair<float, float>> const& realPath() const { return m_realPath; }
+    std::pair<float, float> plannedEnd() const { return m_plannedEnd; }
+    std::pair<float, float> realEnd() const { return m_realEnd; }
+    int drawVersion() const { return m_drawVersion; }
+
 private:
     Generator() = default;
 
@@ -149,6 +158,12 @@ private:
     // The last stretch of the real replay, so a death can make the approach to it
     // expensive rather than only the spot itself.
     std::vector<std::pair<float, float>> m_realPath;
+
+    // The route as the simulator flew it, for drawing over the real level.
+    std::vector<std::pair<float, float>> m_plannedPath;
+    std::pair<float, float> m_plannedEnd{0.f, 0.f};
+    std::pair<float, float> m_realEnd{0.f, 0.f};
+    int m_drawVersion = 0;
 
     // Set by the game's own death and completion handlers; acted on next frame, since
     // resetting or searching from inside them is asking for trouble.

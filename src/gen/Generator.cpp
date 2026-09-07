@@ -239,8 +239,10 @@ void Generator::noteGameDeath(float x, float y, int objectId) {
               Engine::get().movingSteps() - m_startOffset);
 
     m_diedAt = x;
+    m_realEnd = {x, y};
     m_runDied = true;
     m_runOver = true;
+    ++m_drawVersion;
 }
 
 void Generator::noteGameComplete() {
@@ -409,6 +411,12 @@ void Generator::captureNow() {
     }
     captureStartState(*m_level, m_layer);
 
+    m_plannedPath.clear();
+    m_realPath.clear();
+    m_plannedEnd = {0.f, 0.f};
+    m_realEnd = {0.f, 0.f};
+    ++m_drawVersion;
+
     log::info("{} read the level at step {} (x={:.0f}, y={:.0f}), {} objects kept", kLogTag,
               m_startOffset, m_level->startX, m_level->start.y, m_capture.kept);
     log::info("{} the clocks at that moment: {} steps moved, {:.4f}s of level time ({} steps), "
@@ -513,6 +521,23 @@ void Generator::collectSearch() {
         fail("the search did not get anywhere");
         return;
     }
+
+    // Fly the route once more to keep the shape of it. The search works in states and
+    // throws the path away; the picture needs the path.
+    m_plannedPath.clear();
+    if (m_level) {
+        Run flight(*m_level);
+        for (char want : m_inputs) {
+            flight.step(want != 0);
+            m_plannedPath.emplace_back(static_cast<float>(flight.x),
+                                       static_cast<float>(flight.p.y));
+            if (flight.dead || flight.finished) break;
+        }
+        m_plannedEnd = m_plannedPath.empty()
+                           ? std::make_pair(0.f, 0.f)
+                           : m_plannedPath.back();
+    }
+    ++m_drawVersion;
 
     if (settings().verify == VerifyMode::Off) {
         writeOut(m_result.solved);

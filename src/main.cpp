@@ -30,6 +30,13 @@ void installHotkeys() {
                                        return true;
                                    });
 
+    listenForKeybindSettingPresses(mm::kOverlayKeySetting,
+                                   [](Keybind const&, bool down, bool repeat, double) {
+                                       if (!down || repeat) return false;
+                                       mm::toggleOverlay();
+                                       return true;
+                                   });
+
     listenForKeybindSettingPresses(mm::kStopKeySetting,
                                    [](Keybind const&, bool down, bool repeat, double) {
                                        if (!down || repeat) return false;

@@ -10,6 +10,7 @@ namespace mm {
 void requestMake();
 void requestPlay();
 void requestRecord();
+void toggleOverlay();
 void requestStop();
 
 // What the pause menu button should say right now.

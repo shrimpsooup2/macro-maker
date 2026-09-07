@@ -42,6 +42,7 @@ struct Snapshot {
 
     bool autoPlay = false;
 
+    bool showOverlay = true;
     bool showHud = true;
     double hudY = 0.82;
     double hudScale = 1.0;
@@ -67,6 +68,7 @@ inline Snapshot const& settings() {
 constexpr const char* kMakeKeySetting = "key-make";
 constexpr const char* kPlayKeySetting = "key-play";
 constexpr const char* kRecordKeySetting = "key-record";
+constexpr const char* kOverlayKeySetting = "key-overlay";
 constexpr const char* kStopKeySetting = "key-stop";
 
 constexpr const char* kLogTag = "[macro-maker]";

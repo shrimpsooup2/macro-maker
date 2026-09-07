@@ -1,6 +1,7 @@
 #include "Actions.hpp"
 
 #include "gen/Generator.hpp"
+#include "settings/Settings.hpp"
 
 #include <Geode/Bindings.hpp>
 #include <Geode/Geode.hpp>
@@ -105,6 +106,15 @@ void requestRecord() {
     } else {
         showToast("Could not start recording", kProblem);
     }
+}
+
+void toggleOverlay() {
+    auto* mod = Mod::get();
+    if (!mod) return;
+    bool wanted = !settings().showOverlay;
+    mod->setSettingValue<bool>("show-overlay", wanted);
+    SettingsCache::get().refresh();
+    showToast(wanted ? "Showing what the simulator sees" : "Overlay off", kBusy);
 }
 
 void requestStop() {
