@@ -153,6 +153,7 @@ private:
     void applyBand();
 
     bool touches(Obj const& o) const;
+    bool reaches(Obj const& o) const;
     bool touchesHazard(Obj const& o) const;
     bool innerHits(Obj const& o) const;
 

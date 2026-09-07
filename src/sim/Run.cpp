@@ -253,6 +253,20 @@ bool Run::touchesHazard(Obj const& o) const {
     return l < o.right() && r > o.left() && b < o.top() && t > o.bottom();
 }
 
+bool Run::reaches(Obj const& o) const {
+    // For an orb or a pad: the boxes as they really are, both of them.
+    //
+    // Portals get the fixed box below instead, because a wave is a tenth the size of a
+    // cube and a portal has to be catchable by whatever arrives at it. An orb does not:
+    // the game fires it when the player is on it, and firing ours a few steps late shows
+    // up as a dash that starts late and a whole locked trajectory in the wrong place.
+    double w = 0.0;
+    double h = 0.0;
+    playerBox(w, h);
+    return (x - w * 0.5 < o.right() && x + w * 0.5 > o.left() && p.y - h * 0.5 < o.top() &&
+            p.y + h * 0.5 > o.bottom());
+}
+
 bool Run::innerHits(Obj const& o) const {
     // The smaller box the game uses to decide a collision is fatal rather than merely a
     // bump. Size is inferred, not measured. Without it, brushing a decorative sliver is
@@ -412,6 +426,7 @@ void Run::touchObjects(bool button, bool justPressed) {
             int speed = speedOfId(o.id);
             if (speed >= 0) p.speed = speed;
         } else if (isPad(o.kind)) {
+            if (!reaches(o)) continue;
             if (!isSpent(o)) {
                 markSpent(o);
                 applyPad(o);
@@ -423,6 +438,7 @@ void Run::touchObjects(bool button, bool justPressed) {
             // this step, or made earlier in the air and still held. A button held from
             // the ground -- a jump, in other words -- goes through an orb without
             // firing it, and a simulator that lets it fire plans routes nobody can play.
+            if (!reaches(o)) continue;
             if (button && (justPressed || pressAirborne) && !pressSpent &&
                 (o.multi || !isSpent(o))) {
                 pressSpent = true;
