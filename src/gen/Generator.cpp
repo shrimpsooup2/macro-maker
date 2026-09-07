@@ -111,6 +111,7 @@ bool Generator::startMaking() {
     m_finishedInGame = false;
     m_diedAt = 0.0;
     m_fastWorks = true;
+    m_fromRecording = false;
     m_phase = Phase::Resetting;
     return true;
 }
@@ -125,6 +126,84 @@ bool Generator::startPlayback() {
     return true;
 }
 
+bool Generator::startRecording() {
+    if (!m_layer || busy()) return false;
+
+    SettingsCache::get().refresh();
+    m_recorded.clear();
+    m_recordHeld = false;
+    m_recordFrom = 0;
+    m_fromRecording = true;
+    m_note.clear();
+    m_files.clear();
+    m_phase = Phase::Recording;
+
+    // From the top, so the macro covers the whole attempt.
+    m_selfReset = true;
+    Engine::get().resetLevel();
+    m_selfReset = false;
+    return true;
+}
+
+// The button, written down against the game's own clock -- the same clock a macro is
+// written in, which is the whole point: a recording of a run that worked is a macro
+// whose route is beyond question, so if it plays back wrong the fault is in the timing
+// and nowhere else.
+void Generator::noteButton(bool down) {
+    if (m_phase != Phase::Recording) return;
+    if (down == m_recordHeld) return;
+
+    int frame = Engine::get().gameFrame() - m_recordFrom;
+    if (frame < 0) frame = 0;
+
+    if (static_cast<int>(m_recorded.size()) < frame) {
+        m_recorded.resize(static_cast<std::size_t>(frame), m_recordHeld ? 1 : 0);
+    }
+    m_recorded.resize(static_cast<std::size_t>(frame) + 1, m_recordHeld ? 1 : 0);
+    m_recorded[static_cast<std::size_t>(frame)] = down ? 1 : 0;
+    m_recordHeld = down;
+}
+
+void Generator::runRecordFrame() {
+    Engine& engine = Engine::get();
+
+    if (engine.sawComplete()) {
+        finishRecording("recorded to the end of the level");
+        return;
+    }
+    if (engine.sawDeath() || engine.playerIsDead()) {
+        finishRecording("recorded up to where the run died");
+        return;
+    }
+
+    // Hold the button state out to here, so a press that is still down when the run ends
+    // is in the macro for as long as it was actually held.
+    int frame = engine.gameFrame() - m_recordFrom;
+    if (frame > 0 && static_cast<int>(m_recorded.size()) < frame) {
+        m_recorded.resize(static_cast<std::size_t>(frame), m_recordHeld ? 1 : 0);
+    }
+}
+
+void Generator::finishRecording(std::string why) {
+    m_inputs = m_recorded;
+    m_startFrame = m_recordFrom;
+    m_result = SearchResult{};
+    m_result.length = m_layer ? std::max<double>(1.0, m_layer->m_levelLength) : 1.0;
+    m_result.reachedX = Engine::get().playerX();
+
+    log::info("{} {}: {} steps, {} button changes, from frame {}", kLogTag, why,
+              m_inputs.size(), changesOf(m_inputs).size(), m_recordFrom);
+
+    if (m_inputs.empty()) {
+        fail("nothing was pressed, so there is no macro to write");
+        return;
+    }
+
+    m_phase = Phase::Finished;
+    m_note = why;
+    writeOut(Engine::get().sawComplete());
+}
+
 void Generator::stop() {
     m_cancel.store(true, std::memory_order_relaxed);
     joinWorker();
@@ -137,11 +216,19 @@ void Generator::stop() {
 
 bool Generator::suppressingGameplay() const {
     // Everything from the moment a job starts: the opening the capture is taken from,
-    // the frozen stretch while the search runs, and every replay.
-    return busy();
+    // the frozen stretch while the search runs, and every replay. A recording is the
+    // exception -- the level belongs to whoever is playing it, deaths and all.
+    return busy() && m_phase != Phase::Recording;
 }
 
 void Generator::onLevelReset() {
+    if (m_phase == Phase::Recording && !m_selfReset) {
+        // A restart while recording just starts the take again.
+        m_recorded.clear();
+        m_recordHeld = false;
+        m_recordFrom = 0;
+        return;
+    }
     if (m_selfReset || !busy()) return;
 
     // The player restarted the level from under us, so whatever was going on is over.
@@ -199,6 +286,10 @@ void Generator::normalFrame(GJBaseGameLayer* layer) {
 
         case Phase::Replaying:
             runReplayFrame();
+            break;
+
+        case Phase::Recording:
+            runRecordFrame();
             break;
 
         default:
@@ -488,10 +579,16 @@ void Generator::writeOut(bool complete) {
     MacroInfo info;
     info.levelName = m_level ? m_level->levelName : std::string("Unknown");
     info.levelId = m_level ? m_level->levelId : 0;
+    if (!m_level && m_layer && m_layer->m_level) {
+        // A recording never reads the level, so its name comes straight off the game.
+        info.levelName = std::string(m_layer->m_level->m_levelName);
+        info.levelId = m_layer->m_level->m_levelID.value();
+    }
     info.complete = complete;
     info.reachedPercent =
         complete ? 100.0 : 100.0 * m_result.reachedX / std::max(1.0, m_result.length);
     info.startOffset = m_startFrame;
+    if (m_fromRecording) info.tag = "recorded";
 
     MacroFormats formats;
     formats.gdr2 = settings().writeGdr2;
@@ -563,6 +660,8 @@ std::string Generator::headline() const {
         case Phase::ReplayReset:
         case Phase::Replaying:
             return m_replayVerifying ? "Checking the route" : "Playing the macro";
+        case Phase::Recording:
+            return "Recording";
         case Phase::Finished:
             return "Done";
         case Phase::Failed:
@@ -592,6 +691,9 @@ std::string Generator::detail() const {
             float x = Engine::get().playerX();
             return fmt::format("{} of the way", percentOf(x, length));
         }
+        case Phase::Recording:
+            return fmt::format("{} steps, {} presses", m_recorded.size(),
+                               changesOf(m_recorded).size());
         case Phase::Finished:
         case Phase::Failed:
             return m_note;

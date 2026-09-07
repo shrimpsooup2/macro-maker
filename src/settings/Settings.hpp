@@ -66,6 +66,7 @@ inline Snapshot const& settings() {
 
 constexpr const char* kMakeKeySetting = "key-make";
 constexpr const char* kPlayKeySetting = "key-play";
+constexpr const char* kRecordKeySetting = "key-record";
 constexpr const char* kStopKeySetting = "key-stop";
 
 constexpr const char* kLogTag = "[macro-maker]";

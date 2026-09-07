@@ -34,6 +34,8 @@ ccColor3B colourFor(Phase phase) {
             return ccColor3B{255, 220, 110};
         case Phase::Finished:
             return ccColor3B{130, 255, 160};
+        case Phase::Recording:
+            return ccColor3B{255, 140, 190};
         case Phase::Failed:
             return ccColor3B{255, 130, 140};
         default:

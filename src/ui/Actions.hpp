@@ -9,6 +9,7 @@ namespace mm {
 // so both behave identically.
 void requestMake();
 void requestPlay();
+void requestRecord();
 void requestStop();
 
 // What the pause menu button should say right now.

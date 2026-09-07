@@ -21,6 +21,7 @@ enum class Phase {
     Searching,      // the level is frozen while a worker thread looks for a route
     ReplayReset,    // asked for a reset before playing a route back
     Replaying,      // the route is being fed into the real game, step by step
+    Recording,      // writing down what the person at the keyboard is doing
     Finished,
     Failed,
 };
@@ -45,7 +46,13 @@ public:
 
     bool startMaking();
     bool startPlayback();
+    bool startRecording();
     void stop();
+
+    // The player pressed or let go of the jump button. Recording this rather than the
+    // route is what says whether a macro that does not work is mistimed or is simply a
+    // bad route: a recording of a run that already worked has no route to blame.
+    void noteButton(bool down);
 
     // The game ran a frame of its own.
     void normalFrame(GJBaseGameLayer* layer);
@@ -57,7 +64,7 @@ public:
     void beforePhysicsStep();
 
     // Whether the player's own input should be kept out of the level for now.
-    bool holdingTheControls() const { return busy(); }
+    bool holdingTheControls() const { return busy() && m_phase != Phase::Recording; }
 
     void onLevelReset();
 
@@ -79,6 +86,8 @@ private:
     void collectSearch();
     void joinWorker();
 
+    void runRecordFrame();
+    void finishRecording(std::string why);
     void runReplayFrame();
     bool checkReplayEnded();
     void finishReplay(bool survived);
@@ -124,6 +133,12 @@ private:
     // Whether running the game beyond its own frames actually advances it. If it does
     // not, a check simply happens at normal speed instead of failing.
     bool m_fastWorks = true;
+
+    // What the person at the keyboard did, on the game's own clock.
+    std::vector<char> m_recorded;
+    bool m_recordHeld = false;
+    bool m_fromRecording = false;
+    int m_recordFrom = 0;
 
     // The last stretch of the real replay, so a death can make the approach to it
     // expensive rather than only the spot itself.

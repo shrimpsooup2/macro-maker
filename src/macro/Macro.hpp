@@ -19,6 +19,7 @@ namespace mm {
 
 struct MacroInfo {
     std::string levelName;
+    std::string tag;            // goes on the file name, to keep takes apart
     int levelId = 0;
     bool complete = false;
     double reachedPercent = 0.0;

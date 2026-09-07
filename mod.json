@@ -220,6 +220,14 @@
             "name": "Play The Macro",
             "category": "gameplay"
         },
+        "key-record": {
+            "type": "keybind",
+            "default": [
+                "K"
+            ],
+            "name": "Record What I Play",
+            "category": "gameplay"
+        },
         "key-stop": {
             "type": "keybind",
             "default": [

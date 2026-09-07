@@ -23,6 +23,13 @@ void installHotkeys() {
                                        return true;
                                    });
 
+    listenForKeybindSettingPresses(mm::kRecordKeySetting,
+                                   [](Keybind const&, bool down, bool repeat, double) {
+                                       if (!down || repeat) return false;
+                                       mm::requestRecord();
+                                       return true;
+                                   });
+
     listenForKeybindSettingPresses(mm::kStopKeySetting,
                                    [](Keybind const&, bool down, bool repeat, double) {
                                        if (!down || repeat) return false;

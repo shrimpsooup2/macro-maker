@@ -55,6 +55,7 @@ std::string fileStem(MacroInfo const& info) {
     while (!clean.empty() && clean.back() == '-') clean.pop_back();
     if (clean.empty()) clean = "level";
     if (clean.size() > 48) clean.resize(48);
+    if (!info.tag.empty()) return fmt::format("{}-{} {}", clean, info.levelId, info.tag);
     return fmt::format("{}-{}", clean, info.levelId);
 }
 

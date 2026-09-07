@@ -88,6 +88,25 @@ void requestPlay() {
     }
 }
 
+void requestRecord() {
+    if (!PlayLayer::get()) {
+        showToast("Open a level first", kProblem);
+        return;
+    }
+
+    Generator& generator = Generator::get();
+    if (generator.busy()) {
+        showToast("Already working", kBusy);
+        return;
+    }
+
+    if (generator.startRecording()) {
+        showToast("Recording: play it, and it writes what you did", kGood);
+    } else {
+        showToast("Could not start recording", kProblem);
+    }
+}
+
 void requestStop() {
     Generator& generator = Generator::get();
     if (!generator.busy()) {
@@ -106,6 +125,7 @@ std::string pauseButtonLabel() {
         case Phase::Searching:
         case Phase::ReplayReset:
         case Phase::Replaying:
+        case Phase::Recording:
             return "Stop";
         case Phase::Finished:
             return "Replay";
