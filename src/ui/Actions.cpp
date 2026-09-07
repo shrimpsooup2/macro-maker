@@ -2,6 +2,7 @@
 
 #include "gen/Generator.hpp"
 #include "settings/Settings.hpp"
+#include "ui/Overlay.hpp"
 
 #include <Geode/Bindings.hpp>
 #include <Geode/Geode.hpp>
@@ -109,11 +110,8 @@ void requestRecord() {
 }
 
 void toggleOverlay() {
-    auto* mod = Mod::get();
-    if (!mod) return;
-    bool wanted = !settings().showOverlay;
-    mod->setSettingValue<bool>("show-overlay", wanted);
-    SettingsCache::get().refresh();
+    bool wanted = !overlayVisible();
+    setOverlayVisible(wanted);
     showToast(wanted ? "Showing what the simulator sees" : "Overlay off", kBusy);
 }
 

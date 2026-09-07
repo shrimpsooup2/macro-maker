@@ -62,7 +62,23 @@ void drawPath(CCDrawNode* draw, std::vector<std::pair<float, float>> const& path
     }
 }
 
+bool g_visible = false;
+bool g_asked = false;
+
 } // namespace
+
+bool overlayVisible() {
+    if (!g_asked) {
+        g_asked = true;
+        g_visible = settings().showOverlay;
+    }
+    return g_visible;
+}
+
+void setOverlayVisible(bool visible) {
+    g_asked = true;
+    g_visible = visible;
+}
 
 Overlay* Overlay::get() {
     auto* play = PlayLayer::get();
@@ -107,7 +123,7 @@ bool Overlay::init() {
 }
 
 void Overlay::update(float) {
-    bool wanted = settings().showOverlay;
+    bool wanted = overlayVisible();
     this->setVisible(wanted);
     if (!wanted) return;
 

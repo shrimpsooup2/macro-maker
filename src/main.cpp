@@ -50,8 +50,11 @@ void installHotkeys() {
 $on_mod(Loaded) {
     mm::SettingsCache::get().refresh();
 
-    listenForAllSettingChanges(
-        [](std::string_view, std::shared_ptr<SettingV3>) { mm::SettingsCache::get().refresh(); });
+    // Reading every setting back from inside a setting's own change callback re-enters
+    // the settings system, which is a deadlock waiting for a reason. It waits a frame.
+    listenForAllSettingChanges([](std::string_view, std::shared_ptr<SettingV3>) {
+        queueInMainThread([] { mm::SettingsCache::get().refresh(); });
+    });
 
     installHotkeys();
 }

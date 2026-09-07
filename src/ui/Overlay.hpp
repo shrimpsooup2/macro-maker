@@ -7,6 +7,13 @@ class PlayLayer;
 
 namespace mm {
 
+// Whether the picture is being shown. A flag rather than a setting on purpose: writing a
+// setting from a hotkey re-enters the settings system from inside its own change
+// callback, and that hung the game hard enough that Escape stopped working. The setting
+// is still what it starts as; this is what a keypress changes.
+bool overlayVisible();
+void setOverlayVisible(bool visible);
+
 // The level as the simulator sees it, drawn on top of the level as the game draws it.
 //
 // Every disagreement between the two is a bug, and every bug we have chased in this mod
